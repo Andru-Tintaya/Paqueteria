@@ -1,0 +1,17 @@
+{
+    "name": "MEDIA LUNA - Control de Paquetes",
+    "short_name": "Paquetería ML",
+    "description": "Sistema de control de paquetería con precios configurables",
+    "start_url": "index.html",
+    "display": "standalone",
+    "background_color": "#F0F2F8",
+    "theme_color": "#6C5CE7",
+    "orientation": "portrait",
+    "icons": [
+        {
+            "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' fill='%236C5CE7'/%3E%3Ctext x='256' y='320' text-anchor='middle' font-size='280' fill='white' font-family='sans-serif'%3E🌙%3C/text%3E%3C/svg%3E",
+            "sizes": "512x512",
+            "type": "image/svg+xml"
+        }
+    ]
+}
