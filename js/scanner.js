@@ -1,10 +1,11 @@
-// ===== ESCÁNER QR (CON 2 MODOS: REGISTRO Y CONSULTA) =====
+// ===== ESCÁNER QR (CORREGIDO - SIN RECURSIÓN) =====
 
 let scannerInstance = null;
 let scannerActivo = false;
 let ultimoCodigoEscaneado = null;
 let datosEscaneados = null;
 let modoScanner = 'registro'; // 'registro' o 'consulta'
+let intentosReconexion = 0;
 
 // ===== FUNCIÓN PARA PARSEAR EL CONTENIDO DEL TICKET =====
 function parseTicketData(decodedText) {
@@ -31,7 +32,6 @@ function parseTicketData(decodedText) {
         }
     }
     
-    // Si no se encontró código, intentar con el primer caracter
     if (!resultado.codigo && lines.length > 0) {
         const first = lines[0];
         const match = first.match(/^([A-Za-z])(\d+)/);
@@ -41,7 +41,7 @@ function parseTicketData(decodedText) {
         }
     }
     
-    // Buscar nombre (línea que no es número, no tiene ":" y no es "MEDIA LUNA")
+    // Buscar nombre
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         if (!line.match(/^\d{7,10}$/) && 
@@ -64,7 +64,7 @@ function parseTicketData(decodedText) {
         }
     }
     
-    // Buscar detalle (línea con "detalle:")
+    // Buscar detalle
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         if (line.toLowerCase().includes('detalle')) {
@@ -75,7 +75,6 @@ function parseTicketData(decodedText) {
         }
     }
     
-    // Si no se encontró detalle, usar la siguiente línea descriptiva
     if (!resultado.detalle) {
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
@@ -110,8 +109,8 @@ function parseTicketData(decodedText) {
     return resultado;
 }
 
-// ===== CAMBIAR MODO DEL ESCÁNER =====
-function setModoScanner(modo) {
+// ===== CAMBIAR MODO DEL ESCÁNER (CORREGIDO - SIN RECURSIÓN) =====
+function cambiarModoScanner(modo) {
     modoScanner = modo;
     const btnRegistro = document.getElementById('modoRegistro');
     const btnConsulta = document.getElementById('modoConsulta');
@@ -132,13 +131,42 @@ function setModoScanner(modo) {
         }
     }
     
-    // Reiniciar scanner para aplicar modo
+    mostrarToast(`📷 Modo: ${modo === 'registro' ? 'Registro' : 'Consulta'}`, 'success');
+    
+    // Si el scanner está activo, reiniciarlo para aplicar el modo
     if (scannerActivo) {
         detenerScanner();
-        setTimeout(() => iniciarScanner(), 300);
+        setTimeout(function() {
+            iniciarScanner();
+        }, 500);
+    }
+}
+
+// ===== FORZAR ESCÁNER (NUEVO) =====
+function forzarScanner() {
+    mostrarToast('🔄 Reiniciando escáner...', 'warning');
+    
+    // Detener completamente
+    if (scannerInstance && scannerActivo) {
+        try {
+            scannerInstance.stop();
+        } catch(e) {}
+        scannerInstance = null;
+        scannerActivo = false;
     }
     
-    mostrarToast(`📷 Modo: ${modo === 'registro' ? 'Registro' : 'Consulta'}`, 'success');
+    // Limpiar UI
+    document.getElementById('scannerContainer').classList.add('hidden');
+    document.getElementById('btnIniciarScanner').classList.remove('hidden');
+    document.getElementById('btnDetenerScanner').classList.add('hidden');
+    document.getElementById('scannerResult').classList.add('hidden');
+    document.getElementById('scannerResult').style.display = 'none';
+    document.getElementById('formularioRapido').classList.add('hidden');
+    
+    // Esperar y reiniciar
+    setTimeout(function() {
+        iniciarScanner();
+    }, 800);
 }
 
 // ===== INICIAR ESCÁNER =====
@@ -147,20 +175,29 @@ function iniciarScanner() {
     const btnIniciar = document.getElementById('btnIniciarScanner');
     const btnDetener = document.getElementById('btnDetenerScanner');
 
-    if (!container) return;
+    if (!container) {
+        console.error('❌ Contenedor del escáner no encontrado');
+        return;
+    }
 
+    // Verificar soporte de cámara
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         mostrarToast('⚠️ Tu navegador no soporta cámara. Usa búsqueda manual.', 'error');
         return;
     }
 
-    if (scannerActivo) return;
+    if (scannerActivo) {
+        mostrarToast('⚠️ El escáner ya está activo', 'warning');
+        return;
+    }
 
+    // Mostrar contenedor
     container.classList.remove('hidden');
 
     try {
         if (typeof Html5Qrcode === 'undefined') {
             mostrarToast('❌ Librería de escáner no cargada', 'error');
+            container.classList.add('hidden');
             return;
         }
 
@@ -168,15 +205,20 @@ function iniciarScanner() {
         if (scannerInstance) {
             try {
                 scannerInstance.clear();
-            } catch(e) {}
+            } catch(e) {
+                console.warn('Error al limpiar scanner:', e);
+            }
             scannerInstance = null;
         }
 
-        scannerInstance = new Html5Qrcode("reader");
+        // Crear nueva instancia
+        scannerInstance = new Html5Qrcode("reader", {
+            verbose: false
+        });
 
         const config = {
-            fps: 15,
-            qrbox: { width: 280, height: 280 },
+            fps: 20,
+            qrbox: { width: 260, height: 260 },
             formatsToSupport: [
                 Html5QrcodeSupportedFormats.QR_CODE,
                 Html5QrcodeSupportedFormats.CODE_128,
@@ -184,30 +226,45 @@ function iniciarScanner() {
             ]
         };
 
-        scannerInstance.start({ facingMode: "environment" }, config, onScanSuccess, onScanError)
-            .then(() => {
-                scannerActivo = true;
-                btnIniciar.classList.add('hidden');
-                btnDetener.classList.remove('hidden');
-                document.getElementById('scannerResult').classList.add('hidden');
-                document.getElementById('scannerResult').style.display = 'none';
-                document.getElementById('formularioRapido').classList.add('hidden');
-                const modoTexto = modoScanner === 'registro' ? 'REGISTRO' : 'CONSULTA';
-                mostrarToast(`📷 Cámara activada - Modo ${modoTexto}`, 'success');
-            })
-            .catch(err => {
-                console.error('Error al iniciar scanner:', err);
-                mostrarToast('❌ No se pudo acceder a la cámara', 'error');
-                container.classList.add('hidden');
-                btnIniciar.classList.remove('hidden');
-                btnDetener.classList.add('hidden');
-            });
+        scannerInstance.start(
+            { facingMode: "environment" },
+            config,
+            function(decodedText, decodedResult) {
+                // Éxito al escanear
+                onScanSuccess(decodedText, decodedResult);
+            },
+            function(error) {
+                // Error de escaneo (silenciar)
+                if (error && error.includes('permission')) {
+                    console.warn('⚠️ Error de permisos:', error);
+                }
+            }
+        ).then(function() {
+            scannerActivo = true;
+            btnIniciar.classList.add('hidden');
+            btnDetener.classList.remove('hidden');
+            document.getElementById('scannerResult').classList.add('hidden');
+            document.getElementById('scannerResult').style.display = 'none';
+            document.getElementById('formularioRapido').classList.add('hidden');
+            intentosReconexion = 0;
+            const modoTexto = modoScanner === 'registro' ? 'REGISTRO' : 'CONSULTA';
+            mostrarToast(`📷 Cámara activada - Modo ${modoTexto}`, 'success');
+            console.log('✅ Scanner iniciado correctamente');
+        }).catch(function(err) {
+            console.error('❌ Error al iniciar scanner:', err);
+            mostrarToast('❌ No se pudo acceder a la cámara: ' + err.message, 'error');
+            container.classList.add('hidden');
+            btnIniciar.classList.remove('hidden');
+            btnDetener.classList.add('hidden');
+            scannerActivo = false;
+        });
     } catch (error) {
-        console.error('Error:', error);
-        mostrarToast('❌ Error al iniciar el escáner', 'error');
+        console.error('❌ Error crítico:', error);
+        mostrarToast('❌ Error al iniciar el escáner: ' + error.message, 'error');
         container.classList.add('hidden');
         btnIniciar.classList.remove('hidden');
         btnDetener.classList.add('hidden');
+        scannerActivo = false;
     }
 }
 
@@ -215,16 +272,20 @@ function iniciarScanner() {
 function detenerScanner() {
     if (scannerInstance && scannerActivo) {
         scannerInstance.stop()
-            .then(() => {
+            .then(function() {
                 scannerActivo = false;
                 document.getElementById('scannerContainer').classList.add('hidden');
                 document.getElementById('btnIniciarScanner').classList.remove('hidden');
                 document.getElementById('btnDetenerScanner').classList.add('hidden');
                 mostrarToast('⏹ Cámara detenida', 'warning');
+                console.log('⏹ Scanner detenido');
             })
-            .catch(err => {
+            .catch(function(err) {
                 console.error('Error al detener scanner:', err);
                 scannerActivo = false;
+                document.getElementById('scannerContainer').classList.add('hidden');
+                document.getElementById('btnIniciarScanner').classList.remove('hidden');
+                document.getElementById('btnDetenerScanner').classList.add('hidden');
             });
     } else {
         document.getElementById('scannerContainer').classList.add('hidden');
@@ -247,7 +308,7 @@ function onScanSuccess(decodedText, decodedResult) {
     
     if (!datos.codigo) {
         mostrarToast('❌ No se pudo leer el código del ticket', 'error');
-        setTimeout(() => {
+        setTimeout(function() {
             reiniciarScanner();
         }, 2000);
         return;
@@ -255,7 +316,7 @@ function onScanSuccess(decodedText, decodedResult) {
     
     ultimoCodigoEscaneado = datos.codigo;
     datosEscaneados = datos;
-    document.getElementById('ultimoCodigoEscaner').textContent = `Último: ${datos.codigo}`;
+    document.getElementById('ultimoCodigoEscaner').textContent = 'Último: ' + datos.codigo;
     
     // Verificar si el paquete ya existe
     const paqueteExistente = DB.getPaqueteByCodigo(datos.codigo);
@@ -263,9 +324,8 @@ function onScanSuccess(decodedText, decodedResult) {
     if (modoScanner === 'registro') {
         // ===== MODO REGISTRO =====
         if (paqueteExistente) {
-            // Si ya existe, mostrar mensaje y cambiar a modo consulta
-            mostrarToast(`⚠️ El código ${datos.codigo} ya está registrado`, 'warning');
-            setModoScanner('consulta');
+            mostrarToast('⚠️ El código ' + datos.codigo + ' ya está registrado', 'warning');
+            cambiarModoScanner('consulta');
             mostrarPaqueteEscaneado(paqueteExistente);
             document.getElementById('formularioRapido').classList.add('hidden');
         } else {
@@ -290,14 +350,14 @@ function onScanSuccess(decodedText, decodedResult) {
             const guardado = DB.addPaqueteDirecto(nuevoPaquete);
             
             if (guardado) {
-                mostrarToast(`✅ Paquete ${datos.codigo} registrado para ${datos.nombre || 'cliente'}`, 'success');
+                mostrarToast('✅ Paquete ' + datos.codigo + ' registrado para ' + (datos.nombre || 'cliente'), 'success');
                 const paqueteGuardado = DB.getPaqueteByCodigo(datos.codigo);
                 mostrarPaqueteEscaneado(paqueteGuardado);
                 actualizarDashboard();
                 actualizarListas();
                 actualizarBadge();
             } else {
-                mostrarToast(`❌ Error al guardar el paquete ${datos.codigo}`, 'error');
+                mostrarToast('❌ Error al guardar el paquete ' + datos.codigo, 'error');
             }
         }
     } else {
@@ -305,10 +365,9 @@ function onScanSuccess(decodedText, decodedResult) {
         if (paqueteExistente) {
             mostrarPaqueteEscaneado(paqueteExistente);
             document.getElementById('formularioRapido').classList.add('hidden');
-            mostrarToast(`📦 Paquete ${datos.codigo} encontrado`, 'success');
+            mostrarToast('📦 Paquete ' + datos.codigo + ' encontrado', 'success');
         } else {
-            mostrarToast(`❌ Paquete ${datos.codigo} no encontrado`, 'error');
-            // Mostrar opción para registrar
+            mostrarToast('❌ Paquete ' + datos.codigo + ' no encontrado', 'error');
             document.getElementById('formularioRapido').classList.remove('hidden');
             document.getElementById('paqCodigo').value = datos.codigo;
             document.getElementById('paqNombre').value = datos.nombre || '';
@@ -318,14 +377,6 @@ function onScanSuccess(decodedText, decodedResult) {
             document.getElementById('scannerResult').classList.add('hidden');
             document.getElementById('scannerResult').style.display = 'none';
         }
-    }
-}
-
-// ===== ERROR AL ESCANEAR =====
-function onScanError(error) {
-    // Silenciar errores comunes de escaneo
-    if (error && error.includes('permission')) {
-        console.warn('⚠️ Error de permisos:', error);
     }
 }
 
@@ -380,7 +431,6 @@ function mostrarPaqueteEscaneado(paquete) {
     resultDiv.classList.remove('hidden');
     resultDiv.style.display = 'block';
     
-    // Mostrar/ocultar botones según estado y modo
     const btnEntregar = document.getElementById('btnEntregarScanner');
     const btnEliminar = document.getElementById('btnEliminarScanner');
     
@@ -426,7 +476,7 @@ function guardarPaqueteForm(e) {
     }
     
     if (DB.getPaqueteByCodigo(codigo)) {
-        mostrarToast(`⚠️ El código ${codigo} ya existe`, 'error');
+        mostrarToast('⚠️ El código ' + codigo + ' ya existe', 'error');
         return;
     }
     
@@ -446,7 +496,7 @@ function guardarPaqueteForm(e) {
     
     DB.addPaqueteDirecto(paquete);
     
-    mostrarToast(`✅ Paquete ${codigo} guardado para ${nombre}`, 'success');
+    mostrarToast('✅ Paquete ' + codigo + ' guardado para ' + nombre, 'success');
     
     document.getElementById('formularioRapido').classList.add('hidden');
     document.getElementById('scannerResult').classList.add('hidden');
@@ -456,7 +506,7 @@ function guardarPaqueteForm(e) {
     actualizarListas();
     actualizarBadge();
     
-    setTimeout(() => {
+    setTimeout(function() {
         if (!scannerActivo) {
             iniciarScanner();
         }
@@ -490,9 +540,9 @@ function marcarEntregadoDesdeScanner() {
     const deuda = DB.calcularDeuda(paquete);
     const moneda = DB.getConfiguracion().moneda || 'Bs';
     
-    if (confirm(`¿Marcar paquete ${paquete.codigo} como ENTREGADO?\nDeuda: ${moneda} ${deuda}`)) {
+    if (confirm('¿Marcar paquete ' + paquete.codigo + ' como ENTREGADO?\nDeuda: ' + moneda + ' ' + deuda)) {
         DB.marcarEntregado(paquete.id);
-        mostrarToast(`✅ Paquete ${paquete.codigo} entregado`, 'success');
+        mostrarToast('✅ Paquete ' + paquete.codigo + ' entregado', 'success');
         const paqueteActualizado = DB.getPaqueteByCodigo(ultimoCodigoEscaneado);
         mostrarPaqueteEscaneado(paqueteActualizado);
         actualizarDashboard();
@@ -514,9 +564,9 @@ function eliminarDesdeScanner() {
         return;
     }
     
-    if (confirm(`¿Eliminar paquete ${paquete.codigo}? Esta acción no se puede deshacer.`)) {
+    if (confirm('¿Eliminar paquete ' + paquete.codigo + '? Esta acción no se puede deshacer.')) {
         DB.deletePaquete(paquete.id);
-        mostrarToast(`🗑️ Paquete ${paquete.codigo} eliminado`, 'error');
+        mostrarToast('🗑️ Paquete ' + paquete.codigo + ' eliminado', 'error');
         reiniciarScanner();
         actualizarDashboard();
         actualizarListas();
@@ -532,7 +582,6 @@ function reiniciarScanner() {
     document.getElementById('scannerResult').style.display = 'none';
     document.getElementById('formularioRapido').classList.add('hidden');
     
-    // Limpiar instancia anterior
     if (scannerInstance) {
         try {
             scannerInstance.clear();
@@ -541,8 +590,7 @@ function reiniciarScanner() {
     }
     scannerActivo = false;
     
-    // Reiniciar
-    setTimeout(() => {
+    setTimeout(function() {
         iniciarScanner();
     }, 500);
 }
@@ -566,16 +614,16 @@ function buscarPorCodigo() {
     }
     
     ultimoCodigoEscaneado = codigo;
-    document.getElementById('ultimoCodigoEscaner').textContent = `Último: ${codigo}`;
+    document.getElementById('ultimoCodigoEscaner').textContent = 'Último: ' + codigo;
     
     const paquete = DB.getPaqueteByCodigo(codigo);
     if (paquete) {
-        setModoScanner('consulta');
+        cambiarModoScanner('consulta');
         mostrarPaqueteEscaneado(paquete);
         document.getElementById('formularioRapido').classList.add('hidden');
         if (scannerActivo) detenerScanner();
     } else {
-        setModoScanner('registro');
+        cambiarModoScanner('registro');
         mostrarFormularioRapido(codigo);
         document.getElementById('scannerResult').classList.add('hidden');
         document.getElementById('scannerResult').style.display = 'none';
@@ -593,7 +641,7 @@ document.addEventListener('pageChange', function(e) {
         }
     }
     if (e.detail && e.detail.page === 'escaner') {
-        setTimeout(() => {
+        setTimeout(function() {
             if (!scannerActivo) {
                 iniciarScanner();
             }
@@ -601,7 +649,15 @@ document.addEventListener('pageChange', function(e) {
     }
 });
 
-// ===== INICIALIZAR BOTONES DE MODO =====
-document.addEventListener('DOMContentLoaded', function() {
-    setModoScanner('registro');
-});
+// ===== EXPORTAR FUNCIONES GLOBALES =====
+window.cambiarModoScanner = cambiarModoScanner;
+window.forzarScanner = forzarScanner;
+window.iniciarScanner = iniciarScanner;
+window.detenerScanner = detenerScanner;
+window.reiniciarScanner = reiniciarScanner;
+window.buscarPorCodigo = buscarPorCodigo;
+window.marcarEntregadoDesdeScanner = marcarEntregadoDesdeScanner;
+window.eliminarDesdeScanner = eliminarDesdeScanner;
+window.mostrarFormularioRapido = mostrarFormularioRapido;
+window.guardarPaqueteForm = guardarPaqueteForm;
+window.cancelarFormulario = cancelarFormulario;

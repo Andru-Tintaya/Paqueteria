@@ -124,7 +124,7 @@
             </div>
         </section>
 
-        <!-- ===== ESCÁNER (CON 2 MODOS: REGISTRO Y CONSULTA) ===== -->
+        <!-- ===== ESCÁNER (CON 2 MODOS Y BOTÓN FORZAR) ===== -->
         <section id="escaner" class="page">
             <div class="page-header">
                 <h2>📷 Escanear Ticket</h2>
@@ -134,10 +134,10 @@
             <!-- ===== SELECTOR DE MODO ===== -->
             <div class="card" style="background:#f0edff;border:2px solid #6C5CE7;">
                 <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
-                    <button id="modoRegistro" class="btn-primary" style="flex:1;min-width:120px;" onclick="setModoScanner('registro')">
+                    <button id="modoRegistro" class="btn-primary" style="flex:1;min-width:120px;" onclick="cambiarModoScanner('registro')">
                         <span id="modoRegistroLabel">📝 Modo Registro</span>
                     </button>
-                    <button id="modoConsulta" class="btn-secondary" style="flex:1;min-width:120px;" onclick="setModoScanner('consulta')">
+                    <button id="modoConsulta" class="btn-secondary" style="flex:1;min-width:120px;" onclick="cambiarModoScanner('consulta')">
                         <span id="modoConsultaLabel">🔍 Modo Consulta</span>
                     </button>
                 </div>
@@ -147,17 +147,24 @@
             </div>
 
             <div class="card scanner-card">
-                <div class="scanner-controls">
-                    <button onclick="iniciarScanner()" class="btn-primary btn-block" id="btnIniciarScanner">
+                <div class="scanner-controls" style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <button onclick="iniciarScanner()" class="btn-primary" id="btnIniciarScanner" style="flex:1;">
                         📷 ACTIVAR CÁMARA
                     </button>
-                    <button onclick="detenerScanner()" class="btn-danger btn-block hidden" id="btnDetenerScanner">
+                    <button onclick="forzarScanner()" class="btn-warning" id="btnForzarScanner" style="flex:1;">
+                        🔄 FORZAR ESCÁNER
+                    </button>
+                    <button onclick="detenerScanner()" class="btn-danger hidden" id="btnDetenerScanner" style="flex:1;">
                         ⏹ DETENER
                     </button>
                 </div>
 
                 <div id="scannerContainer" class="scanner-container hidden">
                     <div id="reader"></div>
+                    <div id="scannerOverlay" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:white;text-align:center;pointer-events:none;opacity:0.7;">
+                        <div style="font-size:40px;">📷</div>
+                        <div style="font-size:14px;">Enfoca el código QR</div>
+                    </div>
                 </div>
 
                 <!-- Resultado del escaneo -->
@@ -187,7 +194,7 @@
                 </div>
             </div>
 
-            <!-- Formulario rápido (para registrar cuando no existe el paquete) -->
+            <!-- Formulario rápido -->
             <div id="formularioRapido" class="card hidden">
                 <h3>📝 Registrar Nuevo Paquete</h3>
                 <p style="font-size:13px;color:#666;margin-bottom:12px;">

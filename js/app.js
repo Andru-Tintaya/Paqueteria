@@ -645,11 +645,17 @@ function actualizarBadge() {
     }
 }
 // ===== FUNCIÓN PARA CAMBIAR MODO DEL ESCÁNER (FALLBACK) =====
-window.setModoScanner = function(modo) {
-    // Esta función está definida en scanner.js
-    // Solo la exponemos globalmente como fallback
-    if (typeof setModoScanner === 'function') {
-        setModoScanner(modo);
+// ===== EXPORTAR FUNCIONES DEL SCANNER (SIN RECURSIÓN) =====
+// Esta función solo redirige a la función correcta en scanner.js
+window.cambiarModoScanner = function(modo) {
+    if (typeof cambiarModoScanner === 'function') {
+        cambiarModoScanner(modo);
+    }
+};
+
+window.forzarScanner = function() {
+    if (typeof forzarScanner === 'function') {
+        forzarScanner();
     }
 };
 // ===== AYUDA =====
