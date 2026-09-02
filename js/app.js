@@ -226,7 +226,7 @@ function generarCodigoManual() {
     const codigo = DB.generarCodigo();
     if (codigo) {
         document.getElementById('regCodigo').value = codigo;
-        document.getElementById('codigoActual').textContent = `Código: ${codigo}`;
+        document.getElementById('codigoActual').textContent = 'Código: ' + codigo;
     }
 }
 
@@ -247,7 +247,7 @@ function guardarManual(e) {
     
     // Verificar si ya existe
     if (DB.getPaqueteByCodigo(codigo)) {
-        mostrarToast(`⚠️ El código ${codigo} ya existe`, 'error');
+        mostrarToast('⚠️ El código ' + codigo + ' ya existe', 'error');
         return;
     }
     
@@ -267,7 +267,7 @@ function guardarManual(e) {
     
     DB.addPaqueteDirecto(paquete);
     
-    mostrarToast(`✅ Paquete ${codigo} guardado para ${nombre}`, 'success');
+    mostrarToast('✅ Paquete ' + codigo + ' guardado para ' + nombre, 'success');
     
     // Limpiar formulario
     document.getElementById('regNombre').value = '';
@@ -381,14 +381,14 @@ function verPaquetesCliente(nombre) {
     const paquetes = DB.getPaquetes().filter(p => p.clienteNombre === nombre);
     const pendientes = paquetes.filter(p => p.estado === 'pendiente');
 
-    let msg = `👤 ${nombre}\n📦 ${paquetes.length} paquetes (${pendientes.length} pendientes)\n\n`;
-    msg += `📌 CÓDIGOS:\n`;
+    let msg = '👤 ' + nombre + '\n📦 ' + paquetes.length + ' paquetes (' + pendientes.length + ' pendientes)\n\n';
+    msg += '📌 CÓDIGOS:\n';
     paquetes.forEach(p => {
         const deuda = DB.calcularDeuda(p);
         const dias = DB.calcularDias(p.fechaIngreso);
         const estado = p.estado === 'entregado' ? '✅' : '⏳';
         const moneda = DB.getConfiguracion().moneda || 'Bs';
-        msg += `  ${p.codigo} ${estado} ${moneda} ${deuda} (${dias}d) ${p.detalle || ''}\n`;
+        msg += '  ' + p.codigo + ' ' + estado + ' ' + moneda + ' ' + deuda + ' (' + dias + 'd) ' + (p.detalle || '') + '\n';
     });
     alert(msg);
 }
@@ -415,7 +415,6 @@ function renderizarPaquetes(paquetes) {
     tbody.innerHTML = paquetes.map(p => {
         const deuda = DB.calcularDeuda(p);
         const dias = DB.calcularDias(p.fechaIngreso);
-        const precioBase = p.precioBase || DB.getConfiguracion().precioBase || 3;
         const tieneRecargo = dias > (DB.getConfiguracion().diasGratis || 5);
         
         const estadoDisplay = {
@@ -467,17 +466,17 @@ function verDetallePaquete(id) {
     const diasExtra = tieneRecargo ? dias - diasGratis : 0;
     const recargo = config.recargo || 0.50;
     
-    alert(`📦 PAQUETE ${p.codigo}\n\n` +
-        `👤 Cliente: ${p.clienteNombre}\n` +
-        `📱 Celular: ${p.clienteCelular || 'N/A'}\n` +
-        `📝 Detalle: ${p.detalle || 'Sin detalle'}\n` +
-        `👤 Quien lo dejó: ${p.quienDejo || 'No especificado'}\n` +
-        `📅 Fecha ingreso: ${p.fechaIngreso}\n` +
-        `📅 Días almacenado: ${dias} días\n` +
-        `💰 Precio base: ${moneda} ${precioBase}\n` +
-        `${tieneRecargo ? `📈 Recargo: ${moneda} ${(diasExtra * recargo).toFixed(2)} (${diasExtra} días extra)\n` : '📈 Sin recargo\n'}` +
-        `💰 Deuda total: ${moneda} ${deuda}\n` +
-        `📊 Estado: ${p.estado === 'pendiente' ? '⏳ Pendiente' : '✅ Entregado'}`);
+    alert('📦 PAQUETE ' + p.codigo + '\n\n' +
+        '👤 Cliente: ' + p.clienteNombre + '\n' +
+        '📱 Celular: ' + (p.clienteCelular || 'N/A') + '\n' +
+        '📝 Detalle: ' + (p.detalle || 'Sin detalle') + '\n' +
+        '👤 Quien lo dejó: ' + (p.quienDejo || 'No especificado') + '\n' +
+        '📅 Fecha ingreso: ' + p.fechaIngreso + '\n' +
+        '📅 Días almacenado: ' + dias + ' días\n' +
+        '💰 Precio base: ' + moneda + ' ' + precioBase + '\n' +
+        (tieneRecargo ? '📈 Recargo: ' + moneda + ' ' + (diasExtra * recargo).toFixed(2) + ' (' + diasExtra + ' días extra)\n' : '📈 Sin recargo\n') +
+        '💰 Deuda total: ' + moneda + ' ' + deuda + '\n' +
+        '📊 Estado: ' + (p.estado === 'pendiente' ? '⏳ Pendiente' : '✅ Entregado'));
 }
 
 function entregarPaquete(id) {
@@ -493,9 +492,9 @@ function entregarPaquete(id) {
 function eliminarPaquete(id) {
     const paquete = DB.getPaquete(id);
     if (!paquete) return;
-    if (!confirm(`¿Eliminar paquete ${paquete.codigo}?`)) return;
+    if (!confirm('¿Eliminar paquete ' + paquete.codigo + '?')) return;
     DB.deletePaquete(id);
-    mostrarToast(`🗑️ Paquete ${paquete.codigo} eliminado`, 'error');
+    mostrarToast('🗑️ Paquete ' + paquete.codigo + ' eliminado', 'error');
     actualizarDashboard();
     actualizarListas();
     actualizarBadge();
@@ -517,10 +516,10 @@ function actualizarDashboard() {
     const deudaElement = document.getElementById('totalDeuda');
     const ingresosElement = document.getElementById('totalIngresos');
     if (deudaElement) {
-        deudaElement.innerHTML = `${moneda} ${stats.totalDeuda}`;
+        deudaElement.innerHTML = moneda + ' ' + stats.totalDeuda;
     }
     if (ingresosElement) {
-        ingresosElement.innerHTML = `${moneda} ${stats.totalIngresos}`;
+        ingresosElement.innerHTML = moneda + ' ' + stats.totalIngresos;
     }
 
     const ultimos = DB.getUltimosPaquetes(5);
@@ -559,7 +558,7 @@ function abrirWhatsAppGlobal() {
         return;
     }
     const ultimo = conCelular[conCelular.length - 1];
-    const mensaje = `Hola ${ultimo.nombre} 👋\nTe saludamos de MEDIA LUNA.\nTu paquete está listo para recoger.\n\nEstamos ubicados dentro de la tienda NAHARA.`;
+    const mensaje = 'Hola ' + ultimo.nombre + ' 👋\nTe saludamos de MEDIA LUNA.\nTu paquete está listo para recoger.\n\nEstamos ubicados dentro de la tienda NAHARA.';
     DB.abrirWhatsApp(ultimo.celular, mensaje);
 }
 
@@ -575,22 +574,22 @@ function exportarLista() {
     const moneda = config.moneda || 'Bs';
     
     let texto = '=== LISTA DE PAQUETES ===\n\n';
-    texto += `Fecha: ${new Date().toLocaleDateString()}\n`;
-    texto += `Total: ${paquetes.length} paquetes\n`;
-    texto += `Moneda: ${moneda}\n\n`;
+    texto += 'Fecha: ' + new Date().toLocaleDateString() + '\n';
+    texto += 'Total: ' + paquetes.length + ' paquetes\n';
+    texto += 'Moneda: ' + moneda + '\n\n';
     texto += 'Código | Cliente | Celular | Detalle | Días | Deuda | Estado\n';
     texto += '='.repeat(80) + '\n';
     
     paquetes.forEach(p => {
         const deuda = DB.calcularDeuda(p);
         const dias = DB.calcularDias(p.fechaIngreso);
-        texto += `${p.codigo} | ${p.clienteNombre} | ${p.clienteCelular || '-'} | ${p.detalle || '-'} | ${dias} | ${moneda}${deuda} | ${p.estado}\n`;
+        texto += p.codigo + ' | ' + p.clienteNombre + ' | ' + (p.clienteCelular || '-') + ' | ' + (p.detalle || '-') + ' | ' + dias + ' | ' + moneda + deuda + ' | ' + p.estado + '\n';
     });
     
     const blob = new Blob([texto], { type: 'text/plain;charset=utf-8' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `paquetes_${new Date().toISOString().split('T')[0]}.txt`;
+    link.download = 'paquetes_' + new Date().toISOString().split('T')[0] + '.txt';
     link.click();
     URL.revokeObjectURL(link.href);
     
@@ -619,19 +618,20 @@ function limpiarDatos() {
 }
 
 // ===== TOAST =====
-function mostrarToast(mensaje, tipo = 'success') {
+function mostrarToast(mensaje, tipo) {
+    tipo = tipo || 'success';
     const existing = document.querySelector('.status-toast');
     if (existing) existing.remove();
 
     const toast = document.createElement('div');
-    toast.className = `status-toast ${tipo}`;
+    toast.className = 'status-toast ' + tipo;
     toast.textContent = mensaje;
     document.body.appendChild(toast);
 
-    setTimeout(() => {
+    setTimeout(function() {
         toast.style.opacity = '0';
         toast.style.transform = 'translateX(-50%) translateY(20px)';
-        setTimeout(() => toast.remove(), 300);
+        setTimeout(function() { toast.remove(); }, 300);
     }, 3000);
 }
 
@@ -644,83 +644,184 @@ function actualizarBadge() {
         badge.style.display = stats.pendientes > 0 ? 'inline' : 'none';
     }
 }
-// ===== FUNCIÓN PARA CAMBIAR MODO DEL ESCÁNER (FALLBACK) =====
-// ===== EXPORTAR FUNCIONES DEL SCANNER (SIN RECURSIÓN) =====
-// Esta función solo redirige a la función correcta en scanner.js
-window.cambiarModoScanner = function(modo) {
-    if (typeof cambiarModoScanner === 'function') {
-        cambiarModoScanner(modo);
-    }
-};
 
-window.forzarScanner = function() {
-    if (typeof forzarScanner === 'function') {
-        forzarScanner();
-    }
-};
 // ===== AYUDA =====
 function mostrarAyuda() {
     const config = DB.getConfiguracion();
     const moneda = config.moneda || 'Bs';
-    alert(`🌙 MEDIA LUNA - Control de Paquetes
-
-📷 ESCÁNER (GUARDADO AUTOMÁTICO):
-1. Ve a "Escanear Ticket"
-2. Presiona "ACTIVAR CÁMARA"
-3. Enfoca el código QR del ticket
-4. El sistema LEE y GUARDA AUTOMÁTICAMENTE:
-   • Código (A1, B25, etc.)
-   • Nombre del cliente
-   • Celular
-   • Detalle
-   • Fecha del ticket
-   • Precio base (según configuración)
-5. Si el código YA existe → Muestra la información
-
-💰 CONFIGURACIÓN DE PRECIOS:
-• Moneda: ${moneda}
-• Precio base: ${moneda} ${config.precioBase}
-• Días gratis: ${config.diasGratis}
-• Recargo diario: ${moneda} ${config.recargo}
-• Recargos por precio: Bs2→${config.recargosPorPrecio?.[2]||0.50}, Bs3→${config.recargosPorPrecio?.[3]||0.50}, Bs4→${config.recargosPorPrecio?.[4]||1.00}, Bs6→${config.recargosPorPrecio?.[6]||1.00}
-
-📝 REGISTRO MANUAL:
-• Usa esta opción cuando no tengas ticket físico
-• El código se genera automáticamente (A1 → Z999)
-
-📋 LISTA DE PAQUETES:
-• Todos los paquetes registrados con su deuda calculada
-• Filtra por estado
-• Exporta a archivo de texto
-
-📦 Códigos: A1 hasta Z999 (se reinicia automáticamente)`);
+    alert('🌙 MEDIA LUNA - Control de Paquetes\n\n' +
+        '📷 ESCÁNER (GUARDADO AUTOMÁTICO):\n' +
+        '1. Ve a "Escanear Ticket"\n' +
+        '2. Presiona "ACTIVAR CÁMARA"\n' +
+        '3. Enfoca el código QR del ticket\n' +
+        '4. El sistema LEE y GUARDA AUTOMÁTICAMENTE:\n' +
+        '   • Código (A1, B25, etc.)\n' +
+        '   • Nombre del cliente\n' +
+        '   • Celular\n' +
+        '   • Detalle\n' +
+        '   • Fecha del ticket\n' +
+        '   • Precio base (según configuración)\n' +
+        '5. Si el código YA existe → Muestra la información\n\n' +
+        '💰 CONFIGURACIÓN DE PRECIOS:\n' +
+        '• Moneda: ' + moneda + '\n' +
+        '• Precio base: ' + moneda + ' ' + config.precioBase + '\n' +
+        '• Días gratis: ' + config.diasGratis + '\n' +
+        '• Recargo diario: ' + moneda + ' ' + config.recargo + '\n' +
+        '• Recargos por precio: Bs2→' + (config.recargosPorPrecio?.[2]||0.50) + ', Bs3→' + (config.recargosPorPrecio?.[3]||0.50) + ', Bs4→' + (config.recargosPorPrecio?.[4]||1.00) + ', Bs6→' + (config.recargosPorPrecio?.[6]||1.00) + '\n\n' +
+        '📝 REGISTRO MANUAL:\n' +
+        '• Usa esta opción cuando no tengas ticket físico\n' +
+        '• El código se genera automáticamente (A1 → Z999)\n\n' +
+        '📋 LISTA DE PAQUETES:\n' +
+        '• Todos los paquetes registrados con su deuda calculada\n' +
+        '• Filtra por estado\n' +
+        '• Exporta a archivo de texto\n\n' +
+        '📦 Códigos: A1 hasta Z999 (se reinicia automáticamente)');
 }
 
-// ===== EXPORTAR =====
+// ==========================================
+// ===== EXPORTAR FUNCIONES GLOBALES =====
+// ==========================================
+
+// Funciones de navegación
 window.cambiarPagina = cambiarPagina;
 window.toggleSidebar = toggleSidebar;
+
+// Funciones de clientes
 window.mostrarFormCliente = mostrarFormCliente;
 window.ocultarFormCliente = ocultarFormCliente;
 window.guardarCliente = guardarCliente;
 window.filtrarClientes = filtrarClientes;
+window.verPaquetesCliente = verPaquetesCliente;
+
+// Funciones de paquetes
 window.filtrarPaquetes = filtrarPaquetes;
 window.entregarPaquete = entregarPaquete;
 window.eliminarPaquete = eliminarPaquete;
-window.verPaquetesCliente = verPaquetesCliente;
 window.verDetallePaquete = verDetallePaquete;
+
+// Funciones de configuración
+window.cargarConfiguracion = cargarConfiguracion;
+window.guardarConfiguracionPrecios = guardarConfiguracionPrecios;
+window.guardarConfiguracionCodigos = guardarConfiguracionCodigos;
+
+// Funciones de registro manual
+window.generarCodigoManual = generarCodigoManual;
+window.guardarManual = guardarManual;
+window.seleccionarClienteRegistro = seleccionarClienteRegistro;
+
+// Funciones de utilidad
+window.actualizarDashboard = actualizarDashboard;
+window.actualizarListas = actualizarListas;
+window.actualizarBadge = actualizarBadge;
 window.abrirWhatsAppGlobal = abrirWhatsAppGlobal;
 window.exportarLista = exportarLista;
 window.mostrarAyuda = mostrarAyuda;
 window.mostrarToast = mostrarToast;
-window.actualizarDashboard = actualizarDashboard;
-window.actualizarListas = actualizarListas;
-window.actualizarBadge = actualizarBadge;
-window.cargarConfiguracion = cargarConfiguracion;
-window.guardarConfiguracionPrecios = guardarConfiguracionPrecios;
-window.guardarConfiguracionCodigos = guardarConfiguracionCodigos;
 window.cargarDatosEjemplo = cargarDatosEjemplo;
 window.limpiarDatos = limpiarDatos;
-window.seleccionarClienteRegistro = seleccionarClienteRegistro;
-window.generarCodigoManual = generarCodigoManual;
-window.guardarManual = guardarManual;
-window.eliminarDesdeScanner = eliminarDesdeScanner;
+
+// ==========================================
+// ===== FUNCIONES DEL ESCÁNER (SIN RECURSIÓN) =====
+// ==========================================
+
+// Estas funciones redirigen a scanner.js sin recursión
+window.cambiarModoScanner = function(modo) {
+    // Buscar la función en el scope global (definida en scanner.js)
+    if (typeof window._cambiarModoScanner === 'function') {
+        window._cambiarModoScanner(modo);
+    } else if (typeof cambiarModoScanner === 'function') {
+        cambiarModoScanner(modo);
+    } else {
+        console.warn('⚠️ cambiarModoScanner no está definida en scanner.js');
+    }
+};
+
+window.forzarScanner = function() {
+    if (typeof window._forzarScanner === 'function') {
+        window._forzarScanner();
+    } else if (typeof forzarScanner === 'function') {
+        forzarScanner();
+    } else {
+        console.warn('⚠️ forzarScanner no está definida en scanner.js');
+    }
+};
+
+window.iniciarScanner = function() {
+    if (typeof window._iniciarScanner === 'function') {
+        window._iniciarScanner();
+    } else if (typeof iniciarScanner === 'function') {
+        iniciarScanner();
+    } else {
+        console.warn('⚠️ iniciarScanner no está definida en scanner.js');
+    }
+};
+
+window.detenerScanner = function() {
+    if (typeof window._detenerScanner === 'function') {
+        window._detenerScanner();
+    } else if (typeof detenerScanner === 'function') {
+        detenerScanner();
+    } else {
+        console.warn('⚠️ detenerScanner no está definida en scanner.js');
+    }
+};
+
+window.reiniciarScanner = function() {
+    if (typeof window._reiniciarScanner === 'function') {
+        window._reiniciarScanner();
+    } else if (typeof reiniciarScanner === 'function') {
+        reiniciarScanner();
+    } else {
+        console.warn('⚠️ reiniciarScanner no está definida en scanner.js');
+    }
+};
+
+window.buscarPorCodigo = function() {
+    if (typeof window._buscarPorCodigo === 'function') {
+        window._buscarPorCodigo();
+    } else if (typeof buscarPorCodigo === 'function') {
+        buscarPorCodigo();
+    } else {
+        console.warn('⚠️ buscarPorCodigo no está definida en scanner.js');
+    }
+};
+
+window.marcarEntregadoDesdeScanner = function() {
+    if (typeof window._marcarEntregadoDesdeScanner === 'function') {
+        window._marcarEntregadoDesdeScanner();
+    } else if (typeof marcarEntregadoDesdeScanner === 'function') {
+        marcarEntregadoDesdeScanner();
+    } else {
+        console.warn('⚠️ marcarEntregadoDesdeScanner no está definida en scanner.js');
+    }
+};
+
+window.eliminarDesdeScanner = function() {
+    if (typeof window._eliminarDesdeScanner === 'function') {
+        window._eliminarDesdeScanner();
+    } else if (typeof eliminarDesdeScanner === 'function') {
+        eliminarDesdeScanner();
+    } else {
+        console.warn('⚠️ eliminarDesdeScanner no está definida en scanner.js');
+    }
+};
+
+window.guardarPaqueteForm = function(e) {
+    if (typeof window._guardarPaqueteForm === 'function') {
+        window._guardarPaqueteForm(e);
+    } else if (typeof guardarPaqueteForm === 'function') {
+        guardarPaqueteForm(e);
+    } else {
+        console.warn('⚠️ guardarPaqueteForm no está definida en scanner.js');
+    }
+};
+
+window.cancelarFormulario = function() {
+    if (typeof window._cancelarFormulario === 'function') {
+        window._cancelarFormulario();
+    } else if (typeof cancelarFormulario === 'function') {
+        cancelarFormulario();
+    } else {
+        console.warn('⚠️ cancelarFormulario no está definida en scanner.js');
+    }
+};

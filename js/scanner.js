@@ -649,15 +649,15 @@ document.addEventListener('pageChange', function(e) {
     }
 });
 
-// ===== EXPORTAR FUNCIONES GLOBALES =====
-window.cambiarModoScanner = cambiarModoScanner;
-window.forzarScanner = forzarScanner;
-window.iniciarScanner = iniciarScanner;
-window.detenerScanner = detenerScanner;
-window.reiniciarScanner = reiniciarScanner;
-window.buscarPorCodigo = buscarPorCodigo;
-window.marcarEntregadoDesdeScanner = marcarEntregadoDesdeScanner;
-window.eliminarDesdeScanner = eliminarDesdeScanner;
-window.mostrarFormularioRapido = mostrarFormularioRapido;
-window.guardarPaqueteForm = guardarPaqueteForm;
-window.cancelarFormulario = cancelarFormulario;
+// ===== EXPORTAR FUNCIONES PARA APP.JS =====
+window._cambiarModoScanner = cambiarModoScanner;
+window._forzarScanner = forzarScanner;
+window._iniciarScanner = iniciarScanner;
+window._detenerScanner = detenerScanner;
+window._reiniciarScanner = reiniciarScanner;
+window._buscarPorCodigo = buscarPorCodigo;
+window._marcarEntregadoDesdeScanner = marcarEntregadoDesdeScanner;
+window._eliminarDesdeScanner = eliminarDesdeScanner;
+window._guardarPaqueteForm = guardarPaqueteForm;
+window._cancelarFormulario = cancelarFormulario;
+window._mostrarFormularioRapido = mostrarFormularioRapido;
