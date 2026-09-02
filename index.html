@@ -32,7 +32,7 @@
             <button class="sidebar-close" onclick="toggleSidebar()">✕</button>
         </div>
         <div class="sidebar-user">
-            <div class="avatar"></div>
+            <div class="avatar">👩‍💼</div>
             <div class="user-info">
                 <span>Administradora</span>
                 <small>Dueña del negocio</small>
@@ -42,23 +42,20 @@
             <a href="#" class="active" data-page="dashboard">
                 <span>📊</span> Dashboard
             </a>
+            <a href="#" data-page="escaner">
+                <span>📷</span> Escanear Ticket
+            </a>
             <a href="#" data-page="registro">
-                <span>📦</span> Nuevo Ticket
+                <span>📝</span> Registro Manual
+            </a>
+            <a href="#" data-page="paquetes">
+                <span>📋</span> Lista de Paquetes
             </a>
             <a href="#" data-page="clientes">
                 <span>👤</span> Clientes
             </a>
-            <a href="#" data-page="paquetes">
-                <span>📋</span> Inventario
-            </a>
-            <a href="#" data-page="escaner">
-                <span>📷</span> Escanear
-            </a>
             <a href="#" data-page="configuracion">
                 <span>⚙️</span> Configuración
-            </a>
-            <a href="#" data-page="reportes">
-                <span>📈</span> Reportes
             </a>
         </div>
         <div class="sidebar-footer">
@@ -73,8 +70,8 @@
         <section id="dashboard" class="page active">
             <div class="page-header">
                 <h2>📊 Dashboard</h2>
-                <button onclick="cambiarPagina('registro')" class="btn-primary btn-sm">
-                    ➕ Nuevo Ticket
+                <button onclick="cambiarPagina('escaner')" class="btn-primary btn-sm">
+                    📷 Escanear
                 </button>
             </div>
 
@@ -109,33 +106,15 @@
                 </div>
             </div>
 
-            <div class="stats-grid" style="grid-template-columns: repeat(2,1fr);">
-                <div class="stat-card" style="background: linear-gradient(135deg, #FFF3E0, #FFE0B2);">
-                    <div class="stat-icon" style="background: #FFF3E0;">💰</div>
-                    <div class="stat-info">
-                        <h3 id="totalDeuda"><span id="monedaDeuda">Bs</span> 0</h3>
-                        <p>Total Deuda</p>
-                    </div>
-                </div>
-                <div class="stat-card" style="background: linear-gradient(135deg, #E8F5E9, #C8E6C9);">
-                    <div class="stat-icon" style="background: #E8F5E9;">📈</div>
-                    <div class="stat-info">
-                        <h3 id="totalIngresos"><span id="monedaIngresos">Bs</span> 0</h3>
-                        <p>Ingresos Totales</p>
-                    </div>
-                </div>
-            </div>
-
             <div class="card">
-                <h3>📋 Últimos Paquetes</h3>
+                <h3>📋 Últimos Paquetes Registrados</h3>
                 <div class="table-container">
                     <table>
                         <thead>
                             <tr>
                                 <th>Código</th>
                                 <th>Cliente</th>
-                                <th>Días</th>
-                                <th>Deuda</th>
+                                <th>Celular</th>
                                 <th>Estado</th>
                             </tr>
                         </thead>
@@ -145,58 +124,156 @@
             </div>
         </section>
 
-        <!-- ===== REGISTRO RÁPIDO (CON DETALLE) ===== -->
+        <!-- ===== ESCÁNER (PRIMORDIAL) ===== -->
+        <section id="escaner" class="page">
+            <div class="page-header">
+                <h2>📷 Escanear Ticket</h2>
+                <span class="badge-info" id="ultimoCodigoEscaner">Último: --</span>
+            </div>
+
+            <div class="card scanner-card">
+                <div class="scanner-controls">
+                    <button onclick="iniciarScanner()" class="btn-primary btn-block" id="btnIniciarScanner">
+                        📷 ACTIVAR CÁMARA
+                    </button>
+                    <button onclick="detenerScanner()" class="btn-danger btn-block hidden" id="btnDetenerScanner">
+                        ⏹ DETENER
+                    </button>
+                </div>
+
+                <div id="scannerContainer" class="scanner-container hidden">
+                    <div id="reader"></div>
+                </div>
+
+                <!-- Resultado del escaneo -->
+                <div id="scannerResult" class="scanner-result hidden">
+                    <h3>📦 Ticket Escaneado</h3>
+                    <div id="paqueteInfo" class="paquete-info"></div>
+                    <div class="scanner-actions">
+                        <button onclick="guardarDesdeScanner()" class="btn-success">
+                            💾 Guardar Paquete
+                        </button>
+                        <button onclick="marcarEntregadoDesdeScanner()" class="btn-warning">
+                            ✅ Marcar Entregado
+                        </button>
+                        <button onclick="reiniciarScanner()" class="btn-secondary">
+                            🔄 Escanear otro
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Entrada manual del código -->
+                <div class="manual-input">
+                    <p>📌 O ingresa el código manualmente:</p>
+                    <div class="input-group">
+                        <input type="text" id="codigoManual" placeholder="Ej: A1, B25, Z999" style="text-transform:uppercase;" />
+                        <button onclick="buscarPorCodigo()" class="btn-primary">Buscar</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Formulario rápido al escanear -->
+            <div id="formularioRapido" class="card hidden">
+                <h3>📝 Completar datos del paquete</h3>
+                <form id="paqueteForm" onsubmit="guardarPaqueteForm(event)">
+                    <div class="form-group">
+                        <label>📌 Código *</label>
+                        <input type="text" id="paqCodigo" required readonly style="background:#f0edff;font-weight:bold;font-size:18px;" />
+                    </div>
+                    <div class="form-group">
+                        <label>👤 Nombre del Cliente *</label>
+                        <input type="text" id="paqNombre" required placeholder="Nombre completo" />
+                    </div>
+                    <div class="form-group">
+                        <label>📱 Celular</label>
+                        <input type="tel" id="paqCelular" placeholder="7XXXXXXX" />
+                    </div>
+                    <div class="form-group">
+                        <label>📝 Detalle (opcional)</label>
+                        <input type="text" id="paqDetalle" placeholder="Descripción del paquete" />
+                    </div>
+                    <div class="form-group">
+                        <label>👤 Quién lo dejó (opcional)</label>
+                        <input type="text" id="paqQuienDejo" placeholder="Persona que dejó el paquete" />
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn-primary">💾 Guardar Paquete</button>
+                        <button type="button" onclick="cancelarFormulario()" class="btn-secondary">Cancelar</button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <!-- ===== REGISTRO MANUAL ===== -->
         <section id="registro" class="page">
             <div class="page-header">
-                <h2>📦 Nuevo Ticket</h2>
-                <span class="badge-info" id="ticketCount">0 tickets</span>
+                <h2>📝 Registro Manual</h2>
+                <span class="badge-info" id="codigoActual">Código: A1</span>
             </div>
 
             <div class="card">
-                <div class="form-group">
-                    <label>👤 Cliente *</label>
-                    <input type="text" id="regNombre" placeholder="Nombre completo" autocomplete="off" />
-                    <div id="suggestions" class="suggestions-box"></div>
+                <form id="registroManualForm" onsubmit="guardarManual(event)">
+                    <div class="form-group">
+                        <label>📌 Código *</label>
+                        <input type="text" id="regCodigo" required style="font-weight:bold;font-size:16px;background:#f0edff;" />
+                        <small>El código se genera automáticamente. Puedes modificarlo si es necesario.</small>
+                    </div>
+                    <div class="form-group">
+                        <label>👤 Nombre del Cliente *</label>
+                        <input type="text" id="regNombre" required placeholder="Nombre completo" />
+                    </div>
+                    <div class="form-group">
+                        <label>📱 Celular</label>
+                        <input type="tel" id="regCelular" placeholder="7XXXXXXX" />
+                    </div>
+                    <div class="form-group">
+                        <label>📝 Detalle (opcional)</label>
+                        <input type="text" id="regDetalle" placeholder="Descripción del paquete" />
+                    </div>
+                    <div class="form-group">
+                        <label>👤 Quién lo dejó (opcional)</label>
+                        <input type="text" id="regQuienDejo" placeholder="Persona que dejó el paquete" />
+                    </div>
+                    <button type="submit" class="btn-primary btn-block">💾 Guardar Paquete</button>
+                </form>
+            </div>
+        </section>
+
+        <!-- ===== LISTA DE PAQUETES ===== -->
+        <section id="paquetes" class="page">
+            <div class="page-header">
+                <h2>📋 Lista de Paquetes</h2>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <select id="filtroEstado" onchange="filtrarPaquetes()" class="filter-select">
+                        <option value="">Todos</option>
+                        <option value="pendiente">⏳ Pendientes</option>
+                        <option value="entregado">✅ Entregados</option>
+                    </select>
+                    <button onclick="exportarLista()" class="btn-primary btn-sm">📥 Exportar</button>
                 </div>
+            </div>
 
-                <div class="form-group">
-                    <label>📱 Celular</label>
-                    <input type="tel" id="regCelular" placeholder="7XXXXXXX" />
+            <div class="card">
+                <div class="search-bar">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" id="buscarPaquete" placeholder="Buscar por código o cliente..." oninput="filtrarPaquetes()" />
                 </div>
-
-                <div class="form-group">
-                    <label>📝 Detalle (opcional)</label>
-                    <input type="text" id="regDetalle" placeholder="Descripción del paquete" />
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Código</th>
+                                <th>Cliente</th>
+                                <th>Celular</th>
+                                <th>Detalle</th>
+                                <th>Fecha</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="listaPaquetes"></tbody>
+                    </table>
                 </div>
-
-                <!-- Info de precio según configuración -->
-                <div id="infoPrecio" class="info-box">
-                    <p><strong>💰 Precio base:</strong> <span id="infoPrecioBase">3</span> <span id="infoMoneda">Bs</span></p>
-                    <p><strong>📅 Días gratis:</strong> <span id="infoDiasGratis">5</span> días</p>
-                    <p><strong>📈 Recargo diario:</strong> <span id="infoRecargo">0.50</span> <span id="infoMonedaRecargo">Bs</span></p>
-                </div>
-
-                <div class="form-actions">
-                    <button onclick="agregarTicket()" class="btn-primary">
-                        ➕ Agregar (ENTER)
-                    </button>
-                    <button onclick="eliminarUltimoTicket()" class="btn-danger">
-                        🗑️ Eliminar último
-                    </button>
-                </div>
-
-                <div class="tickets-display">
-                    <label>📌 Tickets generados:</label>
-                    <div id="ticketsList" class="tickets-list"></div>
-                </div>
-
-                <button onclick="generarPDF()" class="btn-success btn-block">
-                    📄 GENERAR PDF (Ctrl+P)
-                </button>
-
-                <button onclick="enviarWhatsAppTicket()" class="btn-primary btn-block" style="margin-top:8px;background:linear-gradient(135deg,#25D366,#128C7E);">
-                    💬 ENVIAR WHATSAPP
-                </button>
             </div>
         </section>
 
@@ -248,88 +325,6 @@
             </div>
         </section>
 
-        <!-- ===== INVENTARIO ===== -->
-        <section id="paquetes" class="page">
-            <div class="page-header">
-                <h2>📋 Inventario</h2>
-                <select id="filtroEstado" onchange="filtrarPaquetes()" class="filter-select">
-                    <option value="">Todos</option>
-                    <option value="pendiente">⏳ Pendientes</option>
-                    <option value="entregado">✅ Entregados</option>
-                    <option value="pago_pendiente">💰 Pago Pendiente</option>
-                </select>
-            </div>
-
-            <div class="card">
-                <div class="search-bar">
-                    <span class="search-icon">🔍</span>
-                    <input type="text" id="buscarPaquete" placeholder="Buscar código o cliente..." oninput="filtrarPaquetes()" />
-                </div>
-                <div class="table-container">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Código</th>
-                                <th>Cliente</th>
-                                <th>Detalle</th>
-                                <th>Días</th>
-                                <th>Deuda</th>
-                                <th>Estado</th>
-                                <th>Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody id="listaPaquetes"></tbody>
-                    </table>
-                </div>
-            </div>
-        </section>
-
-        <!-- ===== ESCÁNER ===== -->
-        <section id="escaner" class="page">
-            <div class="page-header">
-                <h2>📷 Escanear</h2>
-            </div>
-
-            <div class="card scanner-card">
-                <div class="scanner-controls">
-                    <button onclick="iniciarScanner()" class="btn-primary btn-block" id="btnIniciarScanner">
-                        📷 ACTIVAR CÁMARA
-                    </button>
-                    <button onclick="detenerScanner()" class="btn-danger btn-block hidden" id="btnDetenerScanner">
-                        ⏹ DETENER
-                    </button>
-                </div>
-
-                <div id="scannerContainer" class="scanner-container hidden">
-                    <div id="reader"></div>
-                </div>
-
-                <div id="scannerResult" class="scanner-result hidden">
-                    <h3>📦 Paquete Encontrado</h3>
-                    <div id="paqueteInfo" class="paquete-info"></div>
-                    <div class="scanner-actions">
-                        <button onclick="marcarEntregadoDesdeScanner()" class="btn-success">
-                            ✅ Marcar Entregado
-                        </button>
-                        <button onclick="marcarPagoDesdeScanner()" class="btn-warning">
-                            💰 Marcar Pago
-                        </button>
-                        <button onclick="reiniciarScanner()" class="btn-secondary">
-                            🔄 Escanear otro
-                        </button>
-                    </div>
-                </div>
-
-                <div class="manual-input">
-                    <p>O ingresa el código manualmente:</p>
-                    <div class="input-group">
-                        <input type="text" id="codigoManual" placeholder="Ej: A1" />
-                        <button onclick="buscarPorCodigo()" class="btn-primary">Buscar</button>
-                    </div>
-                </div>
-            </div>
-        </section>
-
         <!-- ===== CONFIGURACIÓN ===== -->
         <section id="configuracion" class="page">
             <div class="page-header">
@@ -337,40 +332,32 @@
             </div>
 
             <div class="card">
-                <h3>💰 Configuración de Precios</h3>
+                <h3>⚙️ Configuración del Sistema</h3>
                 <p style="font-size:13px;color:#666;margin-bottom:16px;">
-                    Configura la moneda, precios base, días gratis y recargos.
+                    Configura el comportamiento del sistema.
                 </p>
 
                 <form id="configForm" onsubmit="guardarConfiguracion(event)">
                     <div class="form-group">
-                        <label>💱 Símbolo de Moneda</label>
-                        <input type="text" id="configMoneda" value="Bs" maxlength="5" placeholder="Ej: Bs, $, S/." />
-                        <small>Ejemplo: Bs, $, S/., €, etc.</small>
+                        <label>📌 Rango de Códigos</label>
+                        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                            <div style="flex:1;min-width:100px;">
+                                <label style="font-weight:normal;font-size:12px;">Desde</label>
+                                <input type="text" id="configCodigoDesde" value="A1" maxlength="4" style="text-transform:uppercase;" />
+                            </div>
+                            <div style="flex:1;min-width:100px;">
+                                <label style="font-weight:normal;font-size:12px;">Hasta</label>
+                                <input type="text" id="configCodigoHasta" value="Z999" maxlength="4" style="text-transform:uppercase;" />
+                            </div>
+                        </div>
+                        <small>Formato: Letra + Número (ej: A1, B25, Z999)</small>
                     </div>
 
                     <div class="form-group">
-                        <label>💰 Precio Base</label>
-                        <input type="number" id="configPrecioBase" value="3" min="0.50" step="0.50" required />
-                        <small>Precio inicial del ticket</small>
-                    </div>
-
-                    <div class="form-group">
-                        <label>📅 Días Gratis</label>
-                        <input type="number" id="configDiasGratis" value="5" min="1" max="60" required />
-                        <small>Días de almacenamiento sin recargo</small>
-                    </div>
-
-                    <div class="form-group">
-                        <label>📈 Recargo Diario</label>
-                        <input type="number" id="configRecargo" value="0.50" min="0.10" step="0.10" required />
-                        <small>Cobro adicional por cada día después de los días gratis</small>
-                    </div>
-
-                    <div class="form-group">
-                        <label>📊 Tabla de Precios</label>
-                        <div id="tablaPreciosPreview" style="background:#f8f9fa;padding:12px;border-radius:8px;font-size:13px;max-height:300px;overflow-y:auto;">
-                            <!-- Se llena con JS -->
+                        <label>🔄 Reinicio automático</label>
+                        <div style="display:flex;gap:10px;align-items:center;">
+                            <input type="checkbox" id="configReinicioAuto" checked />
+                            <label style="font-weight:normal;font-size:13px;">Reiniciar desde A1 al llegar al límite</label>
                         </div>
                     </div>
 
@@ -392,51 +379,12 @@
             </div>
         </section>
 
-        <!-- ===== REPORTES ===== -->
-        <section id="reportes" class="page">
-            <div class="page-header">
-                <h2>📈 Reportes</h2>
-            </div>
-
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-icon">📦</div>
-                    <div class="stat-info">
-                        <h3 id="repTotal">0</h3>
-                        <p>Total Paquetes</p>
-                    </div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">⏳</div>
-                    <div class="stat-info">
-                        <h3 id="repPendientes">0</h3>
-                        <p>Pendientes</p>
-                    </div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">✅</div>
-                    <div class="stat-info">
-                        <h3 id="repEntregados">0</h3>
-                        <p>Entregados</p>
-                    </div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">💰</div>
-                    <div class="stat-info">
-                        <h3 id="repIngresos"><span id="monedaRepIngresos">Bs</span> 0</h3>
-                        <p>Ingresos Totales</p>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card">
-                <h3>📊 Paquetes por Estado</h3>
-                <div id="estadosChart" class="chart-container"></div>
-            </div>
-        </section>
-
     </main>
 
+    <!-- ===== BOTÓN FLOTANTE WHATSAPP ===== -->
+    <button class="fab-whatsapp" onclick="abrirWhatsAppGlobal()" id="fabWhatsapp">
+        💬
+    </button>
 
     <!-- ===== SCRIPTS ===== -->
     <script src="js/database.js"></script>

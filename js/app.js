@@ -1,9 +1,5 @@
 // ===== APP PRINCIPAL =====
 
-let ticketsGenerados = [];
-let clienteActual = null;
-let clienteIdActual = null;
-
 // ----- INICIALIZACIÓN -----
 document.addEventListener('DOMContentLoaded', function() {
     // Navegación
@@ -19,48 +15,26 @@ document.addEventListener('DOMContentLoaded', function() {
     // Formularios
     document.getElementById('clienteForm')?.addEventListener('submit', guardarCliente);
     document.getElementById('configForm')?.addEventListener('submit', guardarConfiguracion);
+    document.getElementById('registroManualForm')?.addEventListener('submit', guardarManual);
 
-    // Autocompletar registro
+    // Autocompletar en registro manual
     document.getElementById('regNombre')?.addEventListener('input', autocompletarRegistro);
-    document.getElementById('regNombre')?.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            document.getElementById('regCelular').focus();
-        }
-    });
-    document.getElementById('regCelular')?.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            document.getElementById('regDetalle').focus();
-        }
-    });
-    document.getElementById('regDetalle')?.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            agregarTicket();
-        }
-    });
 
     // Atajos de teclado
     document.addEventListener('keydown', function(e) {
-        if (e.ctrlKey && e.key === 'p') {
-            e.preventDefault();
-            if (document.getElementById('registro').classList.contains('active')) {
-                generarPDF();
-            }
-        }
         if (e.key === 'Escape') {
             toggleSidebar(false);
         }
     });
 
+    // Generar código automático al cargar registro manual
+    generarCodigoManual();
+
     // Inicializar
     actualizarDashboard();
     actualizarListas();
-    actualizarReportes();
     actualizarBadge();
     cargarConfiguracion();
-    actualizarInfoPrecio();
 
     console.log('✅ Sistema MEDIA LUNA iniciado');
 });
@@ -81,9 +55,9 @@ function cambiarPagina(page) {
     document.dispatchEvent(new CustomEvent('pageChange', { detail: { page: page } }));
 
     if (page === 'dashboard') actualizarDashboard();
-    if (page === 'reportes') actualizarReportes();
     if (page === 'paquetes') actualizarListas();
     if (page === 'clientes') actualizarListas();
+    if (page === 'registro') generarCodigoManual();
     if (page === 'configuracion') cargarConfiguracion();
 
     toggleSidebar(false);
@@ -110,297 +84,61 @@ function toggleSidebar(forceState) {
     }
 }
 
-// ----- CONFIGURACIÓN -----
-function cargarConfiguracion() {
-    const config = DB.getConfiguracion();
-    document.getElementById('configMoneda').value = config.moneda || 'Bs';
-    document.getElementById('configPrecioBase').value = config.precioBase || 3;
-    document.getElementById('configDiasGratis').value = config.diasGratis || 5;
-    document.getElementById('configRecargo').value = config.recargo || 0.50;
-    actualizarTablaPrecios();
-    actualizarInfoPrecio();
-}
-
-function guardarConfiguracion(e) {
-    e.preventDefault();
-    const config = {
-        moneda: document.getElementById('configMoneda').value.trim() || 'Bs',
-        precioBase: parseFloat(document.getElementById('configPrecioBase').value) || 3,
-        diasGratis: parseInt(document.getElementById('configDiasGratis').value) || 5,
-        recargo: parseFloat(document.getElementById('configRecargo').value) || 0.50
-    };
-
-    DB.guardarConfiguracion(config);
-    actualizarTablaPrecios();
-    actualizarInfoPrecio();
-    actualizarDashboard();
-    actualizarReportes();
-    actualizarListas();
-    mostrarToast('✅ Configuración guardada correctamente', 'success');
-}
-
-function actualizarTablaPrecios() {
-    const config = DB.getConfiguracion();
-    const container = document.getElementById('tablaPreciosPreview');
-    if (!container) return;
-
-    let html = `<table style="width:100%;font-size:13px;border-collapse:collapse;">
-        <thead>
-            <tr style="background:#f0edff;">
-                <th style="padding:6px 10px;text-align:left;">Días</th>
-                <th style="padding:6px 10px;text-align:left;">Precio</th>
-            </tr>
-        </thead>
-        <tbody>`;
-
-    for (let i = 1; i <= 20; i++) {
-        const diasGratis = config.diasGratis || 5;
-        let precio = config.precioBase || 3;
-        if (i > diasGratis) {
-            precio = precio + ((i - diasGratis) * (config.recargo || 0.50));
-        }
-        const moneda = config.moneda || 'Bs';
-        html += `<tr>
-            <td style="padding:4px 10px;border-bottom:1px solid #eee;">${i} día${i > 1 ? 's' : ''}</td>
-            <td style="padding:4px 10px;border-bottom:1px solid #eee;font-weight:${i === diasGratis ? 'bold' : 'normal'};color:${i === diasGratis ? '#6C5CE7' : '#333'};">${moneda} ${Math.round(precio * 100) / 100} ${i === diasGratis ? '⭐' : ''}</td>
-        </tr>`;
+// ----- GENERAR CÓDIGO MANUAL -----
+function generarCodigoManual() {
+    const codigo = DB.generarCodigo();
+    if (codigo) {
+        document.getElementById('regCodigo').value = codigo;
+        document.getElementById('codigoActual').textContent = `Código: ${codigo}`;
     }
-
-    html += `</tbody></table>`;
-    container.innerHTML = html;
 }
 
-function actualizarInfoPrecio() {
-    const config = DB.getConfiguracion();
-    const moneda = config.moneda || 'Bs';
-    document.getElementById('infoPrecioBase').textContent = config.precioBase || 3;
-    document.getElementById('infoDiasGratis').textContent = config.diasGratis || 5;
-    document.getElementById('infoRecargo').textContent = config.recargo || 0.50;
-    document.getElementById('infoMoneda').textContent = moneda;
-    document.getElementById('infoMonedaRecargo').textContent = moneda;
-}
-
-// ----- REGISTRO DE TICKETS (CON DETALLE) -----
-function agregarTicket() {
+// ----- REGISTRO MANUAL -----
+function guardarManual(e) {
+    e.preventDefault();
+    
+    const codigo = document.getElementById('regCodigo').value.trim().toUpperCase();
     const nombre = document.getElementById('regNombre').value.trim();
     const celular = document.getElementById('regCelular').value.trim();
     const detalle = document.getElementById('regDetalle').value.trim();
-
-    if (!nombre) {
-        mostrarToast('⚠️ El nombre del cliente es obligatorio', 'error');
-        document.getElementById('regNombre').focus();
+    const quienDejo = document.getElementById('regQuienDejo').value.trim();
+    
+    if (!codigo || !nombre) {
+        mostrarToast('⚠️ Código y nombre son obligatorios', 'error');
         return;
     }
-
-    // Buscar o crear cliente
-    let cliente = DB.getClientes().find(c => c.nombre.toLowerCase() === nombre.toLowerCase());
-    if (!cliente) {
-        cliente = DB.addCliente({ nombre, celular });
-        clienteIdActual = cliente.id;
-        clienteActual = cliente;
-    } else {
-        clienteIdActual = cliente.id;
-        clienteActual = cliente;
-        if (celular && cliente.celular !== celular) {
-            DB.updateCliente(cliente.id, { celular });
-            cliente = DB.getCliente(cliente.id);
-            clienteActual = cliente;
-        }
+    
+    // Verificar si ya existe
+    if (DB.getPaqueteByCodigo(codigo)) {
+        mostrarToast(`⚠️ El código ${codigo} ya existe`, 'error');
+        return;
     }
-
-    const config = DB.getConfiguracion();
-
+    
     const paquete = {
-        clienteId: clienteIdActual,
-        clienteNombre: cliente.nombre,
-        tipo: 'Varios',
-        ubicacion: 'Caja 01',
-        precioBase: config.precioBase,
-        detalle: detalle || ''
+        codigo: codigo,
+        clienteNombre: nombre,
+        clienteCelular: celular || '',
+        detalle: detalle || '',
+        quienDejo: quienDejo || '',
+        fechaIngreso: new Date().toISOString().split('T')[0],
+        estado: 'pendiente',
+        pagado: false
     };
-
-    const nuevoPaquete = DB.addPaquete(paquete);
-    ticketsGenerados.push(nuevoPaquete);
-
-    actualizarTicketsUI();
-    document.getElementById('regDetalle').value = '';
-    document.getElementById('regCelular').value = '';
-    document.getElementById('regNombre').value = '';
-    document.getElementById('regNombre').focus();
-
-    actualizarDashboard();
-    actualizarListas();
-    actualizarBadge();
-
-    const deuda = DB.calcularDeuda(nuevoPaquete);
-    const moneda = config.moneda || 'Bs';
-    mostrarToast(`✅ Ticket ${nuevoPaquete.codigo} - ${moneda} ${deuda}`, 'success');
-
-    // Enviar WhatsApp automático
-    if (celular) {
-        const mensaje = `Hola ${cliente.nombre} 👋\nTu paquete *${nuevoPaquete.codigo}* está listo para recoger.\n\n💰 Deuda: ${moneda} ${deuda}\n\n🔑 Presenta este código al momento de recogerlo.\nEstamos ubicados dentro de la tienda NAHARA.`;
-        DB.abrirWhatsApp(celular, mensaje);
-    }
-}
-
-function eliminarUltimoTicket() {
-    if (ticketsGenerados.length === 0) {
-        mostrarToast('⚠️ No hay tickets para eliminar', 'warning');
-        return;
-    }
-
-    const ultimo = ticketsGenerados[ticketsGenerados.length - 1];
-    if (!confirm(`¿Eliminar ticket ${ultimo.codigo}?`)) return;
-
-    DB.deletePaquete(ultimo.id);
-    ticketsGenerados.pop();
-
-    actualizarTicketsUI();
-    actualizarDashboard();
-    actualizarListas();
-    actualizarBadge();
-
-    mostrarToast(`🗑️ Ticket ${ultimo.codigo} eliminado`, 'error');
-}
-
-function actualizarTicketsUI() {
-    const container = document.getElementById('ticketsList');
-    const count = document.getElementById('ticketCount');
-    const moneda = DB.getConfiguracion().moneda || 'Bs';
-
-    if (ticketsGenerados.length === 0) {
-        container.innerHTML = '<span style="color:#999;font-size:13px;">No hay tickets generados</span>';
-        count.textContent = '0 tickets';
-        return;
-    }
-
-    container.innerHTML = ticketsGenerados.map(t => {
-        const deuda = DB.calcularDeuda(t);
-        return `<span class="ticket-tag">${t.codigo} (${moneda} ${deuda})</span>`;
-    }).join('');
-
-    count.textContent = `${ticketsGenerados.length} ticket${ticketsGenerados.length > 1 ? 's' : ''}`;
-}
-
-// ===== GENERAR PDF =====
-function generarPDF() {
-    if (ticketsGenerados.length === 0) {
-        mostrarToast('⚠️ No hay tickets para generar PDF', 'warning');
-        return;
-    }
-
-    const cliente = clienteActual || { nombre: 'Sin nombre', celular: '' };
-    const config = DB.getConfiguracion();
-    const moneda = config.moneda || 'Bs';
-
-    let html = `
-        <div style="font-family:'Courier New',monospace;max-width:350px;margin:0 auto;padding:20px;background:white;">
-            <div style="text-align:center;border-bottom:3px solid #6C5CE7;padding-bottom:10px;margin-bottom:10px;">
-                <div style="font-size:24px;font-weight:800;color:#6C5CE7;">🌙 MEDIA LUNA</div>
-                <small style="font-size:11px;color:#666;">Control de Paquetes</small>
-            </div>
-            <div style="margin:10px 0;font-size:13px;">
-                <div style="display:flex;justify-content:space-between;padding:2px 0;">
-                    <strong>Cliente:</strong> ${cliente.nombre}
-                </div>
-                ${cliente.celular ? `<div style="display:flex;justify-content:space-between;padding:2px 0;"><strong>Celular:</strong> ${cliente.celular}</div>` : ''}
-                <div style="display:flex;justify-content:space-between;padding:2px 0;">
-                    <strong>Fecha:</strong> ${new Date().toLocaleDateString()}
-                </div>
-            </div>
-            <div style="border-top:1px dashed #ccc;margin:10px 0;"></div>
-    `;
-
-    ticketsGenerados.forEach((t, i) => {
-        const deuda = DB.calcularDeuda(t);
-        const dias = DB.calcularDias(t.fechaIngreso);
-        html += `
-            <div style="text-align:center;padding:10px 0;${i > 0 ? 'border-top:1px dashed #ccc;' : ''}">
-                <div style="font-size:28px;font-weight:bold;color:#6C5CE7;">${t.codigo}</div>
-                ${t.detalle ? `<div style="font-size:12px;color:#666;">📝 ${t.detalle}</div>` : ''}
-                <div style="font-size:13px;color:#666;">📅 ${dias} día${dias > 1 ? 's' : ''}</div>
-                <div style="font-size:16px;font-weight:bold;color:${deuda > config.precioBase ? '#E17055' : '#00B894'};">💰 ${moneda} ${deuda}</div>
-                <div style="margin-top:5px;">
-                    <img src="${DB.generarQR(t.codigo)}" alt="QR" style="max-width:80px;" />
-                </div>
-            </div>
-        `;
-    });
-
-    html += `
-            <div style="border-top:1px dashed #ccc;margin:10px 0;"></div>
-            <div style="text-align:center;font-size:11px;color:#999;">
-                Total: ${ticketsGenerados.length} ticket${ticketsGenerados.length > 1 ? 's' : ''}
-                <br />⭐ ${config.diasGratis} días gratis · Recargo: ${moneda} ${config.recargo}/día
-                <br />Gracias por su preferencia ❤️
-            </div>
-        </div>
-    `;
-
-    const ventana = window.open('', '_blank', 'width=400,height=600');
-    ventana.document.write(`
-        <html>
-            <head>
-                <title>Ticket - MEDIA LUNA</title>
-                <style>
-                    body { margin:0; padding:10px; background:#f0f0f0; font-family: 'Courier New', monospace; }
-                    @media print {
-                        body { background:white; padding:0; }
-                        .no-print { display:none; }
-                    }
-                </style>
-            </head>
-            <body>
-                ${html}
-                <div style="text-align:center;padding:15px;" class="no-print">
-                    <button onclick="window.print()" style="padding:10px 30px;background:#6C5CE7;color:white;border:none;border-radius:8px;font-size:16px;cursor:pointer;">🖨️ Imprimir</button>
-                    <button onclick="window.close()" style="padding:10px 30px;background:#666;color:white;border:none;border-radius:8px;font-size:16px;cursor:pointer;margin-left:10px;">❌ Cerrar</button>
-                </div>
-            </body>
-        </html>
-    `);
-    ventana.document.close();
-
-    ticketsGenerados = [];
-    actualizarTicketsUI();
-    clienteActual = null;
-    clienteIdActual = null;
+    
+    DB.addPaqueteDirecto(paquete);
+    
+    mostrarToast(`✅ Paquete ${codigo} guardado para ${nombre}`, 'success');
+    
+    // Limpiar formulario
     document.getElementById('regNombre').value = '';
     document.getElementById('regCelular').value = '';
     document.getElementById('regDetalle').value = '';
-
-    mostrarToast('📄 PDF generado correctamente', 'success');
-}
-
-// ===== WHATSAPP =====
-function enviarWhatsAppTicket() {
-    if (ticketsGenerados.length === 0) {
-        mostrarToast('⚠️ No hay tickets para enviar', 'warning');
-        return;
-    }
-
-    const cliente = clienteActual;
-    if (!cliente || !cliente.celular) {
-        mostrarToast('⚠️ El cliente no tiene celular registrado', 'error');
-        return;
-    }
-
-    const codigos = ticketsGenerados.map(t => t.codigo).join(', ');
-    const mensaje = `Hola ${cliente.nombre} 👋\nTus paquetes *${codigos}* están listos para recoger.\n\n📦 Total: ${ticketsGenerados.length} paquete${ticketsGenerados.length > 1 ? 's' : ''}\n🔑 Presenta estos códigos al momento de recogerlos.\n\nEstamos ubicados dentro de la tienda NAHARA.`;
-
-    DB.abrirWhatsApp(cliente.celular, mensaje);
-}
-
-function abrirWhatsAppGlobal() {
-    const clientes = DB.getClientes();
-    const conCelular = clientes.filter(c => c.celular);
-    if (conCelular.length === 0) {
-        mostrarToast('⚠️ No hay clientes con celular registrado', 'warning');
-        return;
-    }
-    const ultimo = conCelular[conCelular.length - 1];
-    const mensaje = `Hola ${ultimo.nombre} 👋\nTe saludamos de MEDIA LUNA.\nTu paquete está listo para recoger.\n\nEstamos ubicados dentro de la tienda NAHARA.`;
-    DB.abrirWhatsApp(ultimo.celular, mensaje);
+    document.getElementById('regQuienDejo').value = '';
+    
+    generarCodigoManual();
+    actualizarDashboard();
+    actualizarListas();
+    actualizarBadge();
 }
 
 // ----- AUTOCOMPLETADO -----
@@ -420,6 +158,7 @@ function autocompletarRegistro() {
         return;
     }
 
+    // Crear sugerencias
     box.innerHTML = clientes.map(c => `
         <div class="suggestion-item" onclick="seleccionarClienteRegistro(${c.id})">
             <div>
@@ -438,13 +177,9 @@ function seleccionarClienteRegistro(id) {
     document.getElementById('regNombre').value = cliente.nombre;
     document.getElementById('regCelular').value = cliente.celular || '';
     document.getElementById('suggestions').classList.remove('active');
-
-    clienteActual = cliente;
-    clienteIdActual = cliente.id;
-    document.getElementById('regDetalle').focus();
 }
 
-// ===== CLIENTES =====
+// ----- CLIENTES -----
 function mostrarFormCliente() {
     document.getElementById('formCliente').classList.remove('hidden');
     document.getElementById('clienteNombre').focus();
@@ -487,16 +222,15 @@ function renderizarClientes(clientes) {
     }
 
     tbody.innerHTML = clientes.map(c => {
-        const paquetes = DB.getPaquetes().filter(p => p.clienteId === c.id);
-        const pendientes = paquetes.filter(p => p.estado === 'pendiente' || p.estado === 'pago_pendiente').length;
+        const paquetes = DB.getPaquetes().filter(p => p.clienteNombre === c.nombre);
+        const pendientes = paquetes.filter(p => p.estado === 'pendiente').length;
         return `
             <tr>
                 <td><strong>${c.nombre}</strong></td>
                 <td>${c.celular || '-'}</td>
                 <td>${paquetes.length} (${pendientes} ⏳)</td>
                 <td>
-                    <button onclick="verPaquetesCliente(${c.id})" class="btn-primary btn-sm">📋</button>
-                    <button onclick="cargarClienteRegistro(${c.id})" class="btn-success btn-sm">➕</button>
+                    <button onclick="verPaquetesCliente('${c.nombre}')" class="btn-primary btn-sm">📋</button>
                     ${c.celular ? `<button onclick="DB.abrirWhatsApp('${c.celular}','Hola ${c.nombre}, tu paquete está listo para recoger.')" class="btn-sm" style="background:#25D366;color:white;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;">💬</button>` : ''}
                 </td>
             </tr>
@@ -504,58 +238,25 @@ function renderizarClientes(clientes) {
     }).join('');
 }
 
-function verPaquetesCliente(id) {
-    const cliente = DB.getCliente(id);
-    if (!cliente) return;
+function verPaquetesCliente(nombre) {
+    const paquetes = DB.getPaquetes().filter(p => p.clienteNombre === nombre);
+    const pendientes = paquetes.filter(p => p.estado === 'pendiente');
 
-    const paquetes = DB.getPaquetes().filter(p => p.clienteId === id);
-    const pendientes = paquetes.filter(p => p.estado === 'pendiente' || p.estado === 'pago_pendiente');
-
-    let msg = `👤 ${cliente.nombre}\n📱 ${cliente.celular || 'Sin celular'}\n`;
-    msg += `📦 ${paquetes.length} paquetes (${pendientes.length} pendientes)\n\n`;
+    let msg = `👤 ${nombre}\n📦 ${paquetes.length} paquetes (${pendientes.length} pendientes)\n\n`;
     msg += `📌 CÓDIGOS:\n`;
     paquetes.forEach(p => {
-        const deuda = DB.calcularDeuda(p);
-        const dias = DB.calcularDias(p.fechaIngreso);
-        const estado = p.estado === 'entregado' ? '✅' : p.estado === 'pago_pendiente' ? '💰' : '⏳';
-        const moneda = DB.getConfiguracion().moneda || 'Bs';
-        msg += `  ${p.codigo} ${estado} ${moneda} ${deuda} (${dias}d) ${p.detalle ? '📝'+p.detalle : ''}\n`;
+        const estado = p.estado === 'entregado' ? '✅' : '⏳';
+        msg += `  ${p.codigo} ${estado} ${p.detalle || ''}\n`;
     });
     alert(msg);
 }
 
-function cargarClienteRegistro(id) {
-    const cliente = DB.getCliente(id);
-    if (!cliente) return;
-
-    cambiarPagina('registro');
-    document.getElementById('regNombre').value = cliente.nombre;
-    document.getElementById('regCelular').value = cliente.celular || '';
-    clienteActual = cliente;
-    clienteIdActual = cliente.id;
-    document.getElementById('regDetalle').focus();
-}
-
-// ===== PAQUETES =====
+// ----- PAQUETES -----
 function filtrarPaquetes() {
     const termino = document.getElementById('buscarPaquete').value;
     const estado = document.getElementById('filtroEstado').value;
-    const paquetes = DB.getPaquetesConCliente();
-    let filtrados = paquetes;
-
-    if (termino) {
-        const t = termino.toLowerCase();
-        filtrados = filtrados.filter(p =>
-            p.codigo.toLowerCase().includes(t) ||
-            p.clienteNombre.toLowerCase().includes(t)
-        );
-    }
-
-    if (estado) {
-        filtrados = filtrados.filter(p => p.estado === estado);
-    }
-
-    renderizarPaquetes(filtrados);
+    const paquetes = DB.searchPaquetes(termino, estado);
+    renderizarPaquetes(paquetes);
 }
 
 function renderizarPaquetes(paquetes) {
@@ -567,59 +268,50 @@ function renderizarPaquetes(paquetes) {
         return;
     }
 
-    const moneda = DB.getConfiguracion().moneda || 'Bs';
-
     tbody.innerHTML = paquetes.map(p => {
-        const deuda = DB.calcularDeuda(p);
-        const dias = DB.calcularDias(p.fechaIngreso);
         const estadoDisplay = {
             'pendiente': '⏳ Pendiente',
-            'entregado': '✅ Entregado',
-            'pago_pendiente': '💰 Pago Pendiente'
+            'entregado': '✅ Entregado'
         }[p.estado] || p.estado;
 
         const badgeClass = {
             'pendiente': 'badge-pendiente',
-            'entregado': 'badge-entregado',
-            'pago_pendiente': 'badge-warning'
+            'entregado': 'badge-entregado'
         }[p.estado] || '';
 
         return `
             <tr>
-                <td><strong style="color:#6C5CE7;">${p.codigo}</strong></td>
-                <td>${p.clienteNombre}</td>
+                <td><strong style="color:#6C5CE7;font-size:16px;">${p.codigo}</strong></td>
+                <td><strong>${p.clienteNombre}</strong></td>
+                <td>${p.clienteCelular || '-'}</td>
                 <td>${p.detalle || '-'}</td>
-                <td>${dias}</td>
-                <td style="font-weight:600;color:${deuda > (DB.getConfiguracion().precioBase || 3) ? '#E17055' : '#00B894'};">${moneda} ${deuda}</td>
+                <td>${p.fechaIngreso}</td>
                 <td><span class="badge ${badgeClass}">${estadoDisplay}</span></td>
                 <td>
-                    ${p.estado !== 'entregado' ?
-                        `<button onclick="entregarPaquete(${p.id})" class="btn-success btn-sm">✅</button>
-                         <button onclick="marcarPagoPaquete(${p.id})" class="btn-primary btn-sm">💰</button>` :
+                    ${p.estado === 'pendiente' ?
+                        `<button onclick="entregarPaquete(${p.id})" class="btn-success btn-sm">✅</button>` :
                         ''
                     }
                     <button onclick="eliminarPaquete(${p.id})" class="btn-danger btn-sm">🗑️</button>
                     ${p.clienteCelular ? `<button onclick="DB.abrirWhatsApp('${p.clienteCelular}','Hola ${p.clienteNombre}, tu paquete ${p.codigo} está listo.')" class="btn-sm" style="background:#25D366;color:white;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;">💬</button>` : ''}
+                    <button onclick="verDetallePaquete(${p.id})" class="btn-primary btn-sm">👁️</button>
                 </td>
             </tr>
         `;
     }).join('');
 }
 
+function verDetallePaquete(id) {
+    const p = DB.getPaquete(id);
+    if (!p) return;
+    
+    alert(`📦 PAQUETE ${p.codigo}\n\n👤 Cliente: ${p.clienteNombre}\n📱 Celular: ${p.clienteCelular || 'N/A'}\n📝 Detalle: ${p.detalle || 'Sin detalle'}\n👤 Quien lo dejó: ${p.quienDejo || 'No especificado'}\n📅 Fecha: ${p.fechaIngreso}\n📊 Estado: ${p.estado === 'pendiente' ? '⏳ Pendiente' : '✅ Entregado'}`);
+}
+
 function entregarPaquete(id) {
     if (!confirm('¿Marcar este paquete como ENTREGADO?')) return;
     DB.marcarEntregado(id);
     mostrarToast('✅ Paquete entregado', 'success');
-    actualizarDashboard();
-    actualizarListas();
-    actualizarBadge();
-    filtrarPaquetes();
-}
-
-function marcarPagoPaquete(id) {
-    if (!confirm('¿Registrar pago de este paquete?')) return;
-    DB.marcarPago(id);
-    mostrarToast('💰 Pago registrado', 'success');
     actualizarDashboard();
     actualizarListas();
     actualizarBadge();
@@ -641,32 +333,22 @@ function eliminarPaquete(id) {
 // ===== DASHBOARD =====
 function actualizarDashboard() {
     const stats = DB.getEstadisticas();
-    const config = DB.getConfiguracion();
-    const moneda = config.moneda || 'Bs';
-
     document.getElementById('totalPaquetes').textContent = stats.total;
     document.getElementById('pendientes').textContent = stats.pendientes;
     document.getElementById('entregados').textContent = stats.entregados;
     document.getElementById('totalClientes').textContent = stats.clientes;
 
-    document.getElementById('monedaDeuda').textContent = moneda;
-    document.getElementById('totalDeuda').innerHTML = `<span id="monedaDeuda">${moneda}</span> ${stats.totalDeuda}`;
-
-    document.getElementById('monedaIngresos').textContent = moneda;
-    document.getElementById('totalIngresos').innerHTML = `<span id="monedaIngresos">${moneda}</span> ${stats.ingresos}`;
-
     const ultimos = DB.getUltimosPaquetes(5);
     const tbody = document.getElementById('ultimosPaquetes');
     if (tbody) {
         if (ultimos.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#999;padding:12px;">No hay paquetes</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#999;padding:12px;">No hay paquetes</td></tr>';
         } else {
             tbody.innerHTML = ultimos.map(p => `
                 <tr>
                     <td><strong style="color:#6C5CE7;">${p.codigo}</strong></td>
                     <td>${p.clienteNombre}</td>
-                    <td>${p.diasAlmacenado}</td>
-                    <td style="font-weight:600;color:${p.deuda > (DB.getConfiguracion().precioBase || 3) ? '#E17055' : '#00B894'};">${moneda} ${p.deuda}</td>
+                    <td>${p.clienteCelular || '-'}</td>
                     <td><span class="badge ${p.estado === 'pendiente' ? 'badge-pendiente' : 'badge-entregado'}">${p.estado === 'pendiente' ? '⏳' : '✅'}</span></td>
                 </tr>
             `).join('');
@@ -679,58 +361,69 @@ function actualizarListas() {
     const clientes = DB.getClientes();
     renderizarClientes(clientes);
 
-    const paquetes = DB.getPaquetesConCliente();
+    const paquetes = DB.getPaquetes();
     renderizarPaquetes(paquetes);
 }
 
-// ===== REPORTES =====
-function actualizarReportes() {
-    const stats = DB.getEstadisticas();
+// ===== CONFIGURACIÓN =====
+function cargarConfiguracion() {
     const config = DB.getConfiguracion();
-    const moneda = config.moneda || 'Bs';
+    document.getElementById('configCodigoDesde').value = config.codigoDesde || 'A1';
+    document.getElementById('configCodigoHasta').value = config.codigoHasta || 'Z999';
+    document.getElementById('configReinicioAuto').checked = config.reinicioAuto !== false;
+}
 
-    document.getElementById('repTotal').textContent = stats.total;
-    document.getElementById('repPendientes').textContent = stats.pendientes;
-    document.getElementById('repEntregados').textContent = stats.entregados;
-    document.getElementById('monedaRepIngresos').textContent = moneda;
-    document.getElementById('repIngresos').innerHTML = `<span id="monedaRepIngresos">${moneda}</span> ${stats.ingresos}`;
-
-    // Gráfico de estados
-    const paquetes = DB.getPaquetes();
-    const estados = {
-        'pendiente': paquetes.filter(p => p.estado === 'pendiente').length,
-        'pago_pendiente': paquetes.filter(p => p.estado === 'pago_pendiente').length,
-        'entregado': paquetes.filter(p => p.estado === 'entregado').length
+function guardarConfiguracion(e) {
+    e.preventDefault();
+    const config = {
+        codigoDesde: document.getElementById('configCodigoDesde').value.trim().toUpperCase() || 'A1',
+        codigoHasta: document.getElementById('configCodigoHasta').value.trim().toUpperCase() || 'Z999',
+        reinicioAuto: document.getElementById('configReinicioAuto').checked
     };
+    
+    DB.guardarConfiguracion(config);
+    mostrarToast('✅ Configuración guardada', 'success');
+}
 
-    const container = document.getElementById('estadosChart');
-    if (container) {
-        const total = Object.values(estados).reduce((a, b) => a + b, 0) || 1;
-        const colores = {
-            'pendiente': '#FDCB6E',
-            'pago_pendiente': '#FF7675',
-            'entregado': '#00B894'
-        };
-        const labels = {
-            'pendiente': '⏳ Pendiente',
-            'pago_pendiente': '💰 Pago Pendiente',
-            'entregado': '✅ Entregado'
-        };
-
-        container.innerHTML = Object.entries(estados).map(([key, value]) => {
-            const height = Math.max(20, (value / total) * 120);
-            return `
-                <div class="chart-item">
-                    <div class="chart-bar-wrap">
-                        <div class="chart-bar" style="height:${height}px;background:${colores[key]};">
-                            <span class="chart-bar-value">${value}</span>
-                        </div>
-                    </div>
-                    <div class="chart-label">${labels[key]}</div>
-                </div>
-            `;
-        }).join('');
+// ===== WHATSAPP =====
+function abrirWhatsAppGlobal() {
+    const clientes = DB.getClientes();
+    const conCelular = clientes.filter(c => c.celular);
+    if (conCelular.length === 0) {
+        mostrarToast('⚠️ No hay clientes con celular registrado', 'warning');
+        return;
     }
+    const ultimo = conCelular[conCelular.length - 1];
+    const mensaje = `Hola ${ultimo.nombre} 👋\nTe saludamos de MEDIA LUNA.\nTu paquete está listo para recoger.\n\nEstamos ubicados dentro de la tienda NAHARA.`;
+    DB.abrirWhatsApp(ultimo.celular, mensaje);
+}
+
+// ===== EXPORTAR =====
+function exportarLista() {
+    const paquetes = DB.getPaquetes();
+    if (paquetes.length === 0) {
+        mostrarToast('⚠️ No hay datos para exportar', 'warning');
+        return;
+    }
+    
+    let texto = '=== LISTA DE PAQUETES ===\n\n';
+    texto += `Fecha: ${new Date().toLocaleDateString()}\n`;
+    texto += `Total: ${paquetes.length} paquetes\n\n`;
+    texto += 'Código | Cliente | Celular | Detalle | Estado\n';
+    texto += '='.repeat(60) + '\n';
+    
+    paquetes.forEach(p => {
+        texto += `${p.codigo} | ${p.clienteNombre} | ${p.clienteCelular || '-'} | ${p.detalle || '-'} | ${p.estado}\n`;
+    });
+    
+    const blob = new Blob([texto], { type: 'text/plain;charset=utf-8' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `paquetes_${new Date().toISOString().split('T')[0]}.txt`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    
+    mostrarToast('📥 Lista exportada', 'success');
 }
 
 // ===== DATOS DE EJEMPLO =====
@@ -740,7 +433,6 @@ function cargarDatosEjemplo() {
     mostrarToast('✅ Datos de ejemplo cargados', 'success');
     actualizarDashboard();
     actualizarListas();
-    actualizarReportes();
     actualizarBadge();
 }
 
@@ -750,8 +442,8 @@ function limpiarDatos() {
     mostrarToast('🗑️ Todos los datos eliminados', 'error');
     actualizarDashboard();
     actualizarListas();
-    actualizarReportes();
     actualizarBadge();
+    generarCodigoManual();
 }
 
 // ===== TOAST =====
@@ -783,30 +475,32 @@ function actualizarBadge() {
 
 // ===== AYUDA =====
 function mostrarAyuda() {
-    const config = DB.getConfiguracion();
-    const moneda = config.moneda || 'Bs';
     alert(`🌙 MEDIA LUNA - Control de Paquetes
 
-📌 REGISTRO RÁPIDO:
-1. Escribe nombre (autocompleta)
-2. Celular (opcional)
-3. Detalle (opcional)
-4. ENTER para agregar ticket
-5. Ctrl+P para generar PDF
+📷 ESCÁNER (PRIMORDIAL):
+1. Ve a "Escanear Ticket"
+2. Presiona "ACTIVAR CÁMARA"
+3. Enfoca el código del ticket (A1, B25, etc.)
+4. Si el código NO existe → Se abre formulario para completar datos
+5. Si el código YA existe → Muestra la información del paquete
 
-💰 PRECIOS:
-• Moneda: ${moneda}
-• Precio base: ${moneda} ${config.precioBase}
-• Días gratis: ${config.diasGratis}
-• Recargo diario: ${moneda} ${config.recargo}
+📝 REGISTRO MANUAL:
+• Usa esta opción cuando no tengas ticket físico
+• El código se genera automáticamente (A1 → Z999)
+• Al llegar a Z999, reinicia desde A1
 
-📷 ESCÁNER:
-1. Presiona "ACTIVAR CÁMARA"
-2. Escanea el QR del paquete
+📋 LISTA DE PAQUETES:
+• Todos los paquetes registrados
+• Filtra por estado (Pendiente/Entregado)
+• Exporta la lista a archivo de texto
+
+👤 CLIENTES:
+• Registra clientes frecuentes
+• Busca por nombre o celular
 
 ⚙️ CONFIGURACIÓN:
-• Cambia moneda (Bs, $, S/., etc.)
-• Ajusta precios y días gratis
+• Cambia el rango de códigos
+• Activa/desactiva el reinicio automático
 
 📦 Códigos: A1 hasta Z999`);
 }
@@ -814,29 +508,27 @@ function mostrarAyuda() {
 // ===== EXPORTAR =====
 window.cambiarPagina = cambiarPagina;
 window.toggleSidebar = toggleSidebar;
-window.agregarTicket = agregarTicket;
-window.eliminarUltimoTicket = eliminarUltimoTicket;
-window.generarPDF = generarPDF;
-window.enviarWhatsAppTicket = enviarWhatsAppTicket;
-window.seleccionarClienteRegistro = seleccionarClienteRegistro;
+window.agregarTicket = function() { cambiarPagina('registro'); };
 window.mostrarFormCliente = mostrarFormCliente;
 window.ocultarFormCliente = ocultarFormCliente;
 window.guardarCliente = guardarCliente;
 window.filtrarClientes = filtrarClientes;
 window.filtrarPaquetes = filtrarPaquetes;
 window.entregarPaquete = entregarPaquete;
-window.marcarPagoPaquete = marcarPagoPaquete;
 window.eliminarPaquete = eliminarPaquete;
 window.verPaquetesCliente = verPaquetesCliente;
-window.cargarClienteRegistro = cargarClienteRegistro;
+window.verDetallePaquete = verDetallePaquete;
 window.abrirWhatsAppGlobal = abrirWhatsAppGlobal;
+window.exportarLista = exportarLista;
 window.mostrarAyuda = mostrarAyuda;
 window.mostrarToast = mostrarToast;
 window.actualizarDashboard = actualizarDashboard;
 window.actualizarListas = actualizarListas;
-window.actualizarReportes = actualizarReportes;
 window.actualizarBadge = actualizarBadge;
 window.cargarConfiguracion = cargarConfiguracion;
 window.guardarConfiguracion = guardarConfiguracion;
 window.cargarDatosEjemplo = cargarDatosEjemplo;
 window.limpiarDatos = limpiarDatos;
+window.seleccionarClienteRegistro = seleccionarClienteRegistro;
+window.generarCodigoManual = generarCodigoManual;
+window.guardarManual = guardarManual;

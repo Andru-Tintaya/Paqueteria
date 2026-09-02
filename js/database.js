@@ -3,10 +3,9 @@
 const DB = {
     // ----- CONFIGURACIÓN POR DEFECTO -----
     CONFIG_DEFAULT: {
-        moneda: 'Bs',
-        precioBase: 3,
-        diasGratis: 5,
-        recargo: 0.50
+        codigoDesde: 'A1',
+        codigoHasta: 'Z999',
+        reinicioAuto: true
     },
 
     // ----- OBTENER DATOS -----
@@ -16,7 +15,6 @@ const DB = {
             const initial = {
                 clientes: [],
                 paquetes: [],
-                historial: [],
                 configuracion: this.CONFIG_DEFAULT,
                 nextIdCliente: 1,
                 nextIdPaquete: 1,
@@ -106,30 +104,72 @@ const DB = {
     generarCodigo: function() {
         const data = this.getAll();
         let ultimo = data.ultimoCodigo || 'A0';
-
+        const config = this.getConfiguracion();
+        
         let letra = ultimo[0];
         let numero = parseInt(ultimo.substring(1)) || 0;
-
-        if (numero >= 999) {
+        
+        numero++;
+        
+        if (numero > 999) {
             if (letra === 'Z') {
-                letra = 'A';
-                numero = 0;
+                if (config.reinicioAuto !== false) {
+                    letra = 'A';
+                    numero = 1;
+                } else {
+                    mostrarToast('⚠️ Límite de códigos alcanzado (Z999)', 'error');
+                    return null;
+                }
             } else {
                 letra = String.fromCharCode(letra.charCodeAt(0) + 1);
-                numero = 0;
+                numero = 1;
             }
         }
-        numero++;
-
+        
         const nuevoCodigo = `${letra}${numero}`;
         data.ultimoCodigo = nuevoCodigo;
         this.save(data);
         return nuevoCodigo;
     },
 
+    // Método para agregar paquete con código ya definido (desde escáner)
+    addPaqueteDirecto: function(paquete) {
+        const data = this.getAll();
+        const codigo = paquete.codigo;
+        
+        // Verificar que no exista
+        if (this.getPaqueteByCodigo(codigo)) {
+            return null;
+        }
+        
+        paquete.id = data.nextIdPaquete++;
+        paquete.fechaIngreso = paquete.fechaIngreso || new Date().toISOString().split('T')[0];
+        paquete.estado = paquete.estado || 'pendiente';
+        paquete.pagado = paquete.pagado || false;
+        data.paquetes.push(paquete);
+        
+        // Actualizar último código
+        const match = codigo.match(/^([A-Z])(\d+)$/);
+        if (match) {
+            const letra = match[1];
+            const numero = parseInt(match[2]);
+            const ultimo = data.ultimoCodigo || 'A0';
+            const uLetra = ultimo[0];
+            const uNumero = parseInt(ultimo.substring(1)) || 0;
+            if (letra > uLetra || (letra === uLetra && numero > uNumero)) {
+                data.ultimoCodigo = codigo;
+            }
+        }
+        
+        this.save(data);
+        return paquete;
+    },
+
     addPaquete: function(paquete) {
         const data = this.getAll();
         const codigo = this.generarCodigo();
+        if (!codigo) return null;
+        
         paquete.id = data.nextIdPaquete++;
         paquete.codigo = codigo;
         paquete.fechaIngreso = new Date().toISOString().split('T')[0];
@@ -137,7 +177,6 @@ const DB = {
         paquete.pagado = false;
         data.paquetes.push(paquete);
         this.save(data);
-        this.agregarHistorial(codigo, 'RECIBIDO', `Paquete registrado para ${paquete.clienteNombre}`);
         return paquete;
     },
 
@@ -152,148 +191,53 @@ const DB = {
 
     deletePaquete: function(id) {
         const data = this.getAll();
-        const paquete = data.paquetes.find(p => p.id === id);
-        if (paquete) {
-            this.agregarHistorial(paquete.codigo, 'ELIMINADO', `Paquete eliminado del sistema`);
-        }
         data.paquetes = data.paquetes.filter(p => p.id !== id);
         this.save(data);
         return true;
     },
 
     marcarEntregado: function(id) {
-        const paquete = this.getPaquete(id);
-        if (!paquete) return null;
-        const resultado = this.updatePaquete(id, {
+        return this.updatePaquete(id, {
             estado: 'entregado',
             fechaEntrega: new Date().toISOString().split('T')[0]
         });
-        if (resultado) {
-            this.agregarHistorial(paquete.codigo, 'ENTREGADO', `Paquete entregado`);
+    },
+
+    searchPaquetes: function(termino, estado) {
+        let paquetes = this.getPaquetes();
+        if (termino) {
+            const t = termino.toLowerCase();
+            paquetes = paquetes.filter(p =>
+                p.codigo.toLowerCase().includes(t) ||
+                p.clienteNombre.toLowerCase().includes(t) ||
+                (p.clienteCelular && p.clienteCelular.includes(t))
+            );
         }
-        return resultado;
-    },
-
-    marcarPago: function(id) {
-        const paquete = this.getPaquete(id);
-        if (!paquete) return null;
-        const resultado = this.updatePaquete(id, {
-            pagado: true,
-            estado: paquete.estado === 'pendiente' ? 'pendiente' : paquete.estado
-        });
-        if (resultado) {
-            this.agregarHistorial(paquete.codigo, 'PAGO', `Pago registrado: ${this.getConfiguracion().moneda} ${this.calcularDeuda(paquete)}`);
+        if (estado) {
+            paquetes = paquetes.filter(p => p.estado === estado);
         }
-        return resultado;
+        return paquetes;
     },
 
-    // ----- HISTORIAL -----
-    getHistorial: function() {
-        return this.getAll().historial || [];
-    },
-
-    agregarHistorial: function(codigo, accion, detalle) {
-        const data = this.getAll();
-        if (!data.historial) data.historial = [];
-        data.historial.push({
-            fecha: new Date().toISOString(),
-            codigo: codigo,
-            accion: accion,
-            detalle: detalle
-        });
-        this.save(data);
-    },
-
-    // ----- CÁLCULOS CON CONFIGURACIÓN -----
-    calcularDeuda: function(paquete) {
-        if (paquete.estado === 'entregado' && paquete.pagado) return 0;
-        if (paquete.pagado) return 0;
-
-        const config = this.getConfiguracion();
-        const precioBase = config.precioBase || 3;
-        const diasGratis = config.diasGratis || 5;
-        const recargo = config.recargo || 0.50;
-
-        const fechaIngreso = new Date(paquete.fechaIngreso);
-        const hoy = new Date();
-        const diffTime = Math.abs(hoy - fechaIngreso);
-        const diffDias = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-        let deuda = precioBase;
-
-        if (diffDias > diasGratis) {
-            const diasExtra = diffDias - diasGratis;
-            deuda = precioBase + (diasExtra * recargo);
-        }
-
-        return Math.round(deuda * 100) / 100;
-    },
-
-    calcularDias: function(fechaIngreso) {
-        const fecha = new Date(fechaIngreso);
-        const hoy = new Date();
-        const diffTime = Math.abs(hoy - fecha);
-        return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    },
-
+    // ----- ESTADÍSTICAS -----
     getEstadisticas: function() {
         const paquetes = this.getPaquetes();
         const clientes = this.getClientes();
         const total = paquetes.length;
         const pendientes = paquetes.filter(p => p.estado === 'pendiente').length;
         const entregados = paquetes.filter(p => p.estado === 'entregado').length;
-        const pagoPendiente = paquetes.filter(p => p.estado === 'pago_pendiente').length;
-
-        let totalDeuda = 0;
-        let ingresos = 0;
-        paquetes.forEach(p => {
-            const deuda = this.calcularDeuda(p);
-            if (p.estado !== 'entregado' || !p.pagado) {
-                totalDeuda += deuda;
-            }
-            if (p.estado === 'entregado' && p.pagado) {
-                ingresos += deuda;
-            }
-        });
 
         return {
             total,
             pendientes,
             entregados,
-            pagoPendiente,
-            clientes: clientes.length,
-            totalDeuda: Math.round(totalDeuda * 100) / 100,
-            ingresos: Math.round(ingresos * 100) / 100
+            clientes: clientes.length
         };
     },
 
     getUltimosPaquetes: function(limit = 5) {
         const paquetes = this.getPaquetes().slice(-limit).reverse();
-        const clientes = this.getClientes();
-        return paquetes.map(p => {
-            const cliente = clientes.find(c => c.id === p.clienteId);
-            return {
-                ...p,
-                clienteNombre: cliente ? cliente.nombre : 'Desconocido',
-                deuda: this.calcularDeuda(p),
-                diasAlmacenado: this.calcularDias(p.fechaIngreso)
-            };
-        });
-    },
-
-    getPaquetesConCliente: function() {
-        const paquetes = this.getPaquetes();
-        const clientes = this.getClientes();
-        return paquetes.map(p => {
-            const cliente = clientes.find(c => c.id === p.clienteId);
-            return {
-                ...p,
-                clienteNombre: cliente ? cliente.nombre : 'Desconocido',
-                clienteCelular: cliente ? cliente.celular : '',
-                deuda: this.calcularDeuda(p),
-                diasAlmacenado: this.calcularDias(p.fechaIngreso)
-            };
-        });
+        return paquetes;
     },
 
     // ----- WHATSAPP -----
@@ -313,77 +257,48 @@ const DB = {
 
     // ===== DATOS DE EJEMPLO =====
     cargarDatosEjemplo: function() {
-        const config = this.getConfiguracion();
         const hoy = new Date();
-
-        const clientes = [
-            { nombre: 'Juan Pérez', celular: '76543210' },
-            { nombre: 'María García', celular: '71234567' },
-            { nombre: 'Pedro Rodríguez', celular: '79876543' },
-            { nombre: 'Ana Martínez', celular: '72345678' },
-            { nombre: 'Carlos López', celular: '73456789' }
+        
+        const paquetesEjemplo = [
+            { codigo: 'A1', clienteNombre: 'Juan Pérez', clienteCelular: '76543210', detalle: 'Camisa de vestir', quienDejo: 'María', fechaIngreso: this._formatDate(new Date(hoy.getTime() - 2*24*60*60*1000)), estado: 'pendiente' },
+            { codigo: 'A2', clienteNombre: 'María García', clienteCelular: '71234567', detalle: 'Vajilla de porcelana', quienDejo: 'Carlos', fechaIngreso: this._formatDate(new Date(hoy.getTime() - 1*24*60*60*1000)), estado: 'pendiente' },
+            { codigo: 'A3', clienteNombre: 'Pedro Rodríguez', clienteCelular: '79876543', detalle: 'Juguete', quienDejo: 'Ana', fechaIngreso: this._formatDate(new Date(hoy.getTime() - 3*24*60*60*1000)), estado: 'entregado' },
+            { codigo: 'A4', clienteNombre: 'Ana Martínez', clienteCelular: '72345678', detalle: 'Maquillaje', quienDejo: 'Luis', fechaIngreso: this._formatDate(hoy), estado: 'pendiente' },
+            { codigo: 'A5', clienteNombre: 'Carlos López', clienteCelular: '73456789', detalle: 'Electrónicos', quienDejo: 'Sofía', fechaIngreso: this._formatDate(new Date(hoy.getTime() - 5*24*60*60*1000)), estado: 'entregado' }
         ];
-
+        
         // Limpiar datos existentes
         const data = this.getAll();
         data.clientes = [];
         data.paquetes = [];
-        data.historial = [];
         data.nextIdCliente = 1;
         data.nextIdPaquete = 1;
-        data.ultimoCodigo = 'A0';
+        data.ultimoCodigo = 'A5';
         this.save(data);
-
-        // Crear clientes
-        const clientesCreados = [];
-        clientes.forEach(c => {
-            clientesCreados.push(this.addCliente(c));
+        
+        // Agregar paquetes
+        paquetesEjemplo.forEach(p => {
+            this.addPaqueteDirecto(p);
         });
-
-        // Crear paquetes
-        for (let i = 0; i < 25; i++) {
-            const cliente = clientesCreados[Math.floor(Math.random() * clientesCreados.length)];
-            const diasAtras = Math.floor(Math.random() * 18);
-            const fecha = new Date(hoy);
-            fecha.setDate(fecha.getDate() - diasAtras);
-
-            const estado = Math.random() > 0.4 ? 'pendiente' : (Math.random() > 0.5 ? 'entregado' : 'pago_pendiente');
-            const pagado = estado === 'entregado' ? Math.random() > 0.3 : false;
-
-            const paquete = {
-                clienteId: cliente.id,
-                clienteNombre: cliente.nombre,
-                tipo: 'Varios',
-                ubicacion: 'Caja 01',
-                precioBase: config.precioBase,
-                detalle: '',
-                fechaIngreso: fecha.toISOString().split('T')[0],
-                estado: estado,
-                pagado: pagado
-            };
-
-            const nuevo = this.addPaquete(paquete);
-            const dataActual = this.getAll();
-            const index = dataActual.paquetes.findIndex(p => p.id === nuevo.id);
-            if (index !== -1) {
-                dataActual.paquetes[index].fechaIngreso = fecha.toISOString().split('T')[0];
-                if (estado === 'entregado') {
-                    const fechaEntrega = new Date(fecha);
-                    fechaEntrega.setDate(fechaEntrega.getDate() + Math.floor(Math.random() * 5) + 1);
-                    dataActual.paquetes[index].fechaEntrega = fechaEntrega.toISOString().split('T')[0];
-                }
-                this.save(dataActual);
-            }
-        }
-
+        
+        // Crear algunos clientes
+        const nombres = ['Juan Pérez', 'María García', 'Pedro Rodríguez', 'Ana Martínez', 'Carlos López'];
+        nombres.forEach(n => {
+            const cel = '7' + Math.floor(10000000 + Math.random() * 90000000);
+            this.addCliente({ nombre: n, celular: cel });
+        });
+        
         return true;
+    },
+
+    _formatDate: function(date) {
+        return date.toISOString().split('T')[0];
     },
 
     limpiarDatos: function() {
         const data = this.getAll();
         data.clientes = [];
         data.paquetes = [];
-        data.historial = [];
         data.nextIdCliente = 1;
         data.nextIdPaquete = 1;
         data.ultimoCodigo = 'A0';
