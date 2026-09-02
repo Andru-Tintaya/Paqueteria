@@ -644,7 +644,14 @@ function actualizarBadge() {
         badge.style.display = stats.pendientes > 0 ? 'inline' : 'none';
     }
 }
-
+// ===== FUNCIÓN PARA CAMBIAR MODO DEL ESCÁNER (FALLBACK) =====
+window.setModoScanner = function(modo) {
+    // Esta función está definida en scanner.js
+    // Solo la exponemos globalmente como fallback
+    if (typeof setModoScanner === 'function') {
+        setModoScanner(modo);
+    }
+};
 // ===== AYUDA =====
 function mostrarAyuda() {
     const config = DB.getConfiguracion();

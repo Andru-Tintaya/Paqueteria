@@ -124,11 +124,26 @@
             </div>
         </section>
 
-        <!-- ===== ESCÁNER (PRIMORDIAL - GUARDADO AUTOMÁTICO) ===== -->
+        <!-- ===== ESCÁNER (CON 2 MODOS: REGISTRO Y CONSULTA) ===== -->
         <section id="escaner" class="page">
             <div class="page-header">
                 <h2>📷 Escanear Ticket</h2>
                 <span class="badge-info" id="ultimoCodigoEscaner">Último: --</span>
+            </div>
+
+            <!-- ===== SELECTOR DE MODO ===== -->
+            <div class="card" style="background:#f0edff;border:2px solid #6C5CE7;">
+                <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
+                    <button id="modoRegistro" class="btn-primary" style="flex:1;min-width:120px;" onclick="setModoScanner('registro')">
+                        <span id="modoRegistroLabel">📝 Modo Registro</span>
+                    </button>
+                    <button id="modoConsulta" class="btn-secondary" style="flex:1;min-width:120px;" onclick="setModoScanner('consulta')">
+                        <span id="modoConsultaLabel">🔍 Modo Consulta</span>
+                    </button>
+                </div>
+                <p style="text-align:center;font-size:12px;color:#666;margin-top:8px;" id="modoDescripcion">
+                    📝 Registro: Guarda automáticamente tickets nuevos | 🔍 Consulta: Busca y muestra detalles de paquetes existentes
+                </p>
             </div>
 
             <div class="card scanner-card">
@@ -150,7 +165,7 @@
                     <h3>📦 Ticket Escaneado</h3>
                     <div id="paqueteInfo" class="paquete-info"></div>
                     <div class="scanner-actions">
-                        <button onclick="marcarEntregadoDesdeScanner()" class="btn-success" id="btnEntregarScanner">
+                        <button onclick="marcarEntregadoDesdeScanner()" class="btn-success" id="btnEntregarScanner" style="display:none;">
                             ✅ Marcar Entregado
                         </button>
                         <button onclick="eliminarDesdeScanner()" class="btn-danger" id="btnEliminarScanner" style="display:none;">
@@ -172,11 +187,11 @@
                 </div>
             </div>
 
-            <!-- Formulario rápido (solo si falla el parseo automático) -->
+            <!-- Formulario rápido (para registrar cuando no existe el paquete) -->
             <div id="formularioRapido" class="card hidden">
-                <h3>📝 Completar datos del paquete</h3>
+                <h3>📝 Registrar Nuevo Paquete</h3>
                 <p style="font-size:13px;color:#666;margin-bottom:12px;">
-                    El sistema no pudo leer todos los datos del ticket. Por favor, completa la información manualmente.
+                    Completa los datos para registrar el paquete en el sistema.
                 </p>
                 <form id="paqueteForm" onsubmit="guardarPaqueteForm(event)">
                     <div class="form-group">
@@ -224,6 +239,7 @@
                     <div class="form-group">
                         <label>👤 Nombre del Cliente *</label>
                         <input type="text" id="regNombre" required placeholder="Nombre completo" />
+                        <div id="suggestions" class="suggestions-box"></div>
                     </div>
                     <div class="form-group">
                         <label>📱 Celular</label>
@@ -269,7 +285,8 @@
                                 <th>Cliente</th>
                                 <th>Celular</th>
                                 <th>Detalle</th>
-                                <th>Fecha</th>
+                                <th>Días</th>
+                                <th>Deuda</th>
                                 <th>Estado</th>
                                 <th>Acciones</th>
                             </tr>
@@ -328,124 +345,110 @@
             </div>
         </section>
 
-            <!-- ===== CONFIGURACIÓN ===== -->
-            <section id="configuracion" class="page">
-                <div class="page-header">
-                    <h2>⚙️ Configuración</h2>
-                </div>
+        <!-- ===== CONFIGURACIÓN ===== -->
+        <section id="configuracion" class="page">
+            <div class="page-header">
+                <h2>⚙️ Configuración</h2>
+            </div>
 
-                <!-- CONFIGURACIÓN DE PRECIOS -->
-                <div class="card">
-                    <h3>💰 Configuración de Precios</h3>
-                    <p style="font-size:13px;color:#666;margin-bottom:16px;">
-                        Configura el precio base, días gratis y recargos. Los cambios se aplican automáticamente.
-                    </p>
+            <!-- CONFIGURACIÓN DE PRECIOS -->
+            <div class="card">
+                <h3>💰 Configuración de Precios</h3>
+                <p style="font-size:13px;color:#666;margin-bottom:16px;">
+                    Configura el precio base, días gratis y recargos. Los cambios se aplican automáticamente.
+                </p>
 
-                    <form id="configPreciosForm" onsubmit="guardarConfiguracionPrecios(event)">
-                        <div class="form-group">
-                            <label>💱 Símbolo de Moneda</label>
-                            <input type="text" id="configMoneda" value="Bs" maxlength="5" placeholder="Ej: Bs, $, S/." />
-                            <small>Ejemplo: Bs, $, S/., €, etc.</small>
-                        </div>
+                <form id="configPreciosForm" onsubmit="guardarConfiguracionPrecios(event)">
+                    <div class="form-group">
+                        <label>💱 Símbolo de Moneda</label>
+                        <input type="text" id="configMoneda" value="Bs" maxlength="5" placeholder="Ej: Bs, $, S/." />
+                        <small>Ejemplo: Bs, $, S/., €, etc.</small>
+                    </div>
 
-                        <div class="form-group">
-                            <label>💰 Precio Base (Bs)</label>
-                            <input type="number" id="configPrecioBase" value="3" min="0.50" step="0.50" required />
-                            <small>Precio inicial del ticket</small>
-                        </div>
+                    <div class="form-group">
+                        <label>💰 Precio Base</label>
+                        <input type="number" id="configPrecioBase" value="3" min="0.50" step="0.50" required />
+                        <small>Precio inicial del ticket</small>
+                    </div>
 
-                        <div class="form-group">
-                            <label>📅 Días Gratis</label>
-                            <input type="number" id="configDiasGratis" value="5" min="1" max="60" required />
-                            <small>Días de almacenamiento sin recargo</small>
-                        </div>
+                    <div class="form-group">
+                        <label>📅 Días Gratis</label>
+                        <input type="number" id="configDiasGratis" value="5" min="1" max="60" required />
+                        <small>Días de almacenamiento sin recargo</small>
+                    </div>
 
-                        <div class="form-group">
-                            <label>📈 Recargo Diario (Bs)</label>
-                            <input type="number" id="configRecargo" value="0.50" min="0.10" step="0.10" required />
-                            <small>Cobro adicional por cada día después de los días gratis</small>
-                        </div>
+                    <div class="form-group">
+                        <label>📈 Recargo Diario</label>
+                        <input type="number" id="configRecargo" value="0.50" min="0.10" step="0.10" required />
+                        <small>Cobro adicional por cada día después de los días gratis</small>
+                    </div>
 
-                        <div class="form-group">
-                            <label>📊 Recargos por Precio</label>
-                            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;">
-                                <div>
-                                    <label style="font-weight:normal;font-size:12px;">Bs 2 →</label>
-                                    <input type="number" id="configRecargo2" value="0.50" min="0.10" step="0.10" style="width:80px;" />
-                                </div>
-                                <div>
-                                    <label style="font-weight:normal;font-size:12px;">Bs 3 →</label>
-                                    <input type="number" id="configRecargo3" value="0.50" min="0.10" step="0.10" style="width:80px;" />
-                                </div>
-                                <div>
-                                    <label style="font-weight:normal;font-size:12px;">Bs 4 →</label>
-                                    <input type="number" id="configRecargo4" value="1.00" min="0.10" step="0.10" style="width:80px;" />
-                                </div>
-                                <div>
-                                    <label style="font-weight:normal;font-size:12px;">Bs 6 →</label>
-                                    <input type="number" id="configRecargo6" value="1.00" min="0.10" step="0.10" style="width:80px;" />
-                                </div>
+                    <div class="form-group">
+                        <label>📊 Recargos por Precio</label>
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;">
+                            <div>
+                                <label style="font-weight:normal;font-size:12px;">Bs 2 →</label>
+                                <input type="number" id="configRecargo2" value="0.50" min="0.10" step="0.10" style="width:80px;" />
                             </div>
-                            <small>Recargo diario según el precio base del paquete</small>
-                        </div>
-
-                        <div class="form-group">
-                            <label>📊 Tabla de Precios (Vista Previa)</label>
-                            <div id="tablaPreciosPreview" style="background:#f8f9fa;padding:12px;border-radius:8px;font-size:13px;max-height:300px;overflow-y:auto;">
-                                <!-- Se llena con JS -->
+                            <div>
+                                <label style="font-weight:normal;font-size:12px;">Bs 3 →</label>
+                                <input type="number" id="configRecargo3" value="0.50" min="0.10" step="0.10" style="width:80px;" />
+                            </div>
+                            <div>
+                                <label style="font-weight:normal;font-size:12px;">Bs 4 →</label>
+                                <input type="number" id="configRecargo4" value="1.00" min="0.10" step="0.10" style="width:80px;" />
+                            </div>
+                            <div>
+                                <label style="font-weight:normal;font-size:12px;">Bs 6 →</label>
+                                <input type="number" id="configRecargo6" value="1.00" min="0.10" step="0.10" style="width:80px;" />
                             </div>
                         </div>
+                        <small>Recargo diario según el precio base del paquete</small>
+                    </div>
 
-                        <button type="submit" class="btn-primary btn-block">💾 Guardar Configuración de Precios</button>
-                    </form>
-                </div>
-
-                <!-- CONFIGURACIÓN DE CÓDIGOS -->
-                <div class="card">
-                    <h3>📌 Configuración de Códigos</h3>
-                    <form id="configCodigosForm" onsubmit="guardarConfiguracionCodigos(event)">
-                        <div class="form-group">
-                            <label>📌 Rango de Códigos</label>
-                            <div style="display:flex;gap:10px;flex-wrap:wrap;">
-                                <div style="flex:1;min-width:100px;">
-                                    <label style="font-weight:normal;font-size:12px;">Desde</label>
-                                    <input type="text" id="configCodigoDesde" value="A1" maxlength="4" style="text-transform:uppercase;" />
-                                </div>
-                                <div style="flex:1;min-width:100px;">
-                                    <label style="font-weight:normal;font-size:12px;">Hasta</label>
-                                    <input type="text" id="configCodigoHasta" value="Z999" maxlength="4" style="text-transform:uppercase;" />
-                                </div>
-                            </div>
-                            <small>Formato: Letra + Número (ej: A1, B25, Z999)</small>
+                    <div class="form-group">
+                        <label>📊 Tabla de Precios (Vista Previa)</label>
+                        <div id="tablaPreciosPreview" style="background:#f8f9fa;padding:12px;border-radius:8px;font-size:13px;max-height:300px;overflow-y:auto;">
+                            <!-- Se llena con JS -->
                         </div>
+                    </div>
 
-                        <div class="form-group">
-                            <label>🔄 Reinicio automático</label>
-                            <div style="display:flex;gap:10px;align-items:center;">
-                                <input type="checkbox" id="configReinicioAuto" checked />
-                                <label style="font-weight:normal;font-size:13px;">Reiniciar desde A1 al llegar al límite</label>
+                    <button type="submit" class="btn-primary btn-block">💾 Guardar Configuración de Precios</button>
+                </form>
+            </div>
+
+            <!-- CONFIGURACIÓN DE CÓDIGOS -->
+            <div class="card">
+                <h3>📌 Configuración de Códigos</h3>
+                <form id="configCodigosForm" onsubmit="guardarConfiguracionCodigos(event)">
+                    <div class="form-group">
+                        <label>📌 Rango de Códigos</label>
+                        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                            <div style="flex:1;min-width:100px;">
+                                <label style="font-weight:normal;font-size:12px;">Desde</label>
+                                <input type="text" id="configCodigoDesde" value="A1" maxlength="4" style="text-transform:uppercase;" />
+                            </div>
+                            <div style="flex:1;min-width:100px;">
+                                <label style="font-weight:normal;font-size:12px;">Hasta</label>
+                                <input type="text" id="configCodigoHasta" value="Z999" maxlength="4" style="text-transform:uppercase;" />
                             </div>
                         </div>
+                        <small>Formato: Letra + Número (ej: A1, B25, Z999)</small>
+                    </div>
 
-                        <button type="submit" class="btn-primary btn-block">💾 Guardar Configuración de Códigos</button>
-                    </form>
-                </div>
+                    <div class="form-group">
+                        <label>🔄 Reinicio automático</label>
+                        <div style="display:flex;gap:10px;align-items:center;">
+                            <input type="checkbox" id="configReinicioAuto" checked />
+                            <label style="font-weight:normal;font-size:13px;">Reiniciar desde A1 al llegar al límite</label>
+                        </div>
+                    </div>
 
-                <!-- DATOS DE EJEMPLO -->
-                <div class="card">
-                    <h3>📋 Datos de Ejemplo</h3>
-                    <p style="font-size:13px;color:#666;margin-bottom:12px;">
-                        Carga datos de ejemplo para probar el sistema.
-                    </p>
-                    <button onclick="cargarDatosEjemplo()" class="btn-secondary btn-block">
-                        📥 Cargar Datos de Ejemplo
-                    </button>
-                    <button onclick="limpiarDatos()" class="btn-danger btn-block" style="margin-top:8px;">
-                        🗑️ Limpiar Todos los Datos
-                    </button>
-                </div>
-            </section>
+                    <button type="submit" class="btn-primary btn-block">💾 Guardar Configuración de Códigos</button>
+                </form>
+            </div>
 
+            <!-- DATOS DE EJEMPLO -->
             <div class="card">
                 <h3>📋 Datos de Ejemplo</h3>
                 <p style="font-size:13px;color:#666;margin-bottom:12px;">
