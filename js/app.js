@@ -94,11 +94,13 @@ function toggleSidebar(forceState) {
 function cargarConfiguracion() {
     const config = DB.getConfiguracion();
     
+    // Precios
     document.getElementById('configMoneda').value = config.moneda || 'Bs';
     document.getElementById('configPrecioBase').value = config.precioBase || 3;
     document.getElementById('configDiasGratis').value = config.diasGratis || 5;
     document.getElementById('configRecargo').value = config.recargo || 0.50;
     
+    // Recargos por precio
     if (config.recargosPorPrecio) {
         document.getElementById('configRecargo2').value = config.recargosPorPrecio[2] || 0.50;
         document.getElementById('configRecargo3').value = config.recargosPorPrecio[3] || 0.50;
@@ -106,6 +108,7 @@ function cargarConfiguracion() {
         document.getElementById('configRecargo6').value = config.recargosPorPrecio[6] || 1.00;
     }
     
+    // Códigos
     document.getElementById('configCodigoDesde').value = config.codigoDesde || 'A1';
     document.getElementById('configCodigoHasta').value = config.codigoHasta || 'Z999';
     document.getElementById('configReinicioAuto').checked = config.reinicioAuto !== false;
@@ -665,14 +668,12 @@ function mostrarAyuda() {
 // ==========================================
 // ===== FUNCIONES DE REDIRECCIÓN A SCANNER (SIN RECURSIÓN) =====
 // ==========================================
-// Estas funciones SOLO redirigen a scanner.js sin llamarse a sí mismas
 
 window.cambiarModoScanner = function(modo) {
-    // Buscar la función en el objeto window (definida en scanner.js)
     if (typeof window._cambiarModoScanner === 'function') {
         window._cambiarModoScanner(modo);
     } else {
-        console.warn('⚠️ _cambiarModoScanner no está definida');
+        console.warn('⚠️ _cambiarModoScanner no definida');
     }
 };
 
@@ -680,7 +681,7 @@ window.forzarScanner = function() {
     if (typeof window._forzarScanner === 'function') {
         window._forzarScanner();
     } else {
-        console.warn('⚠️ _forzarScanner no está definida');
+        console.warn('⚠️ _forzarScanner no definida');
     }
 };
 
@@ -688,7 +689,7 @@ window.iniciarScanner = function() {
     if (typeof window._iniciarScanner === 'function') {
         window._iniciarScanner();
     } else {
-        console.warn('⚠️ _iniciarScanner no está definida');
+        console.warn('⚠️ _iniciarScanner no definida');
     }
 };
 
@@ -696,7 +697,7 @@ window.detenerScanner = function() {
     if (typeof window._detenerScanner === 'function') {
         window._detenerScanner();
     } else {
-        console.warn('⚠️ _detenerScanner no está definida');
+        console.warn('⚠️ _detenerScanner no definida');
     }
 };
 
@@ -704,7 +705,7 @@ window.reiniciarScanner = function() {
     if (typeof window._reiniciarScanner === 'function') {
         window._reiniciarScanner();
     } else {
-        console.warn('⚠️ _reiniciarScanner no está definida');
+        console.warn('⚠️ _reiniciarScanner no definida');
     }
 };
 
@@ -712,7 +713,7 @@ window.buscarPorCodigo = function() {
     if (typeof window._buscarPorCodigo === 'function') {
         window._buscarPorCodigo();
     } else {
-        console.warn('⚠️ _buscarPorCodigo no está definida');
+        console.warn('⚠️ _buscarPorCodigo no definida');
     }
 };
 
@@ -720,7 +721,7 @@ window.marcarEntregadoDesdeScanner = function() {
     if (typeof window._marcarEntregadoDesdeScanner === 'function') {
         window._marcarEntregadoDesdeScanner();
     } else {
-        console.warn('⚠️ _marcarEntregadoDesdeScanner no está definida');
+        console.warn('⚠️ _marcarEntregadoDesdeScanner no definida');
     }
 };
 
@@ -728,7 +729,7 @@ window.eliminarDesdeScanner = function() {
     if (typeof window._eliminarDesdeScanner === 'function') {
         window._eliminarDesdeScanner();
     } else {
-        console.warn('⚠️ _eliminarDesdeScanner no está definida');
+        console.warn('⚠️ _eliminarDesdeScanner no definida');
     }
 };
 
@@ -736,7 +737,7 @@ window.guardarPaqueteForm = function(e) {
     if (typeof window._guardarPaqueteForm === 'function') {
         window._guardarPaqueteForm(e);
     } else {
-        console.warn('⚠️ _guardarPaqueteForm no está definida');
+        console.warn('⚠️ _guardarPaqueteForm no definida');
     }
 };
 
@@ -744,13 +745,14 @@ window.cancelarFormulario = function() {
     if (typeof window._cancelarFormulario === 'function') {
         window._cancelarFormulario();
     } else {
-        console.warn('⚠️ _cancelarFormulario no está definida');
+        console.warn('⚠️ _cancelarFormulario no definida');
     }
 };
 
 // ==========================================
 // ===== EXPORTAR RESTO DE FUNCIONES =====
 // ==========================================
+
 window.cambiarPagina = cambiarPagina;
 window.toggleSidebar = toggleSidebar;
 window.mostrarFormCliente = mostrarFormCliente;
