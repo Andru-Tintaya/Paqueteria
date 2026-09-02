@@ -1,5 +1,9 @@
 // ===== APP PRINCIPAL =====
 
+let ticketsGenerados = [];
+let clienteActual = null;
+let clienteIdActual = null;
+
 // ----- INICIALIZACIÓN -----
 document.addEventListener('DOMContentLoaded', function() {
     // Navegación
@@ -14,7 +18,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Formularios
     document.getElementById('clienteForm')?.addEventListener('submit', guardarCliente);
-    document.getElementById('configForm')?.addEventListener('submit', guardarConfiguracion);
     document.getElementById('registroManualForm')?.addEventListener('submit', guardarManual);
 
     // Autocompletar en registro manual
@@ -84,6 +87,140 @@ function toggleSidebar(forceState) {
     }
 }
 
+// ==========================================
+// ===== CONFIGURACIÓN DE PRECIOS =====
+// ==========================================
+
+function cargarConfiguracion() {
+    const config = DB.getConfiguracion();
+    
+    // Precios
+    document.getElementById('configMoneda').value = config.moneda || 'Bs';
+    document.getElementById('configPrecioBase').value = config.precioBase || 3;
+    document.getElementById('configDiasGratis').value = config.diasGratis || 5;
+    document.getElementById('configRecargo').value = config.recargo || 0.50;
+    
+    // Recargos por precio
+    if (config.recargosPorPrecio) {
+        document.getElementById('configRecargo2').value = config.recargosPorPrecio[2] || 0.50;
+        document.getElementById('configRecargo3').value = config.recargosPorPrecio[3] || 0.50;
+        document.getElementById('configRecargo4').value = config.recargosPorPrecio[4] || 1.00;
+        document.getElementById('configRecargo6').value = config.recargosPorPrecio[6] || 1.00;
+    }
+    
+    // Códigos
+    document.getElementById('configCodigoDesde').value = config.codigoDesde || 'A1';
+    document.getElementById('configCodigoHasta').value = config.codigoHasta || 'Z999';
+    document.getElementById('configReinicioAuto').checked = config.reinicioAuto !== false;
+    
+    actualizarTablaPrecios();
+    actualizarInfoPrecio();
+}
+
+function guardarConfiguracionPrecios(e) {
+    e.preventDefault();
+    
+    const config = DB.getConfiguracion();
+    
+    config.moneda = document.getElementById('configMoneda').value.trim() || 'Bs';
+    config.precioBase = parseFloat(document.getElementById('configPrecioBase').value) || 3;
+    config.diasGratis = parseInt(document.getElementById('configDiasGratis').value) || 5;
+    config.recargo = parseFloat(document.getElementById('configRecargo').value) || 0.50;
+    
+    // Guardar recargos por precio
+    config.recargosPorPrecio = {
+        2: parseFloat(document.getElementById('configRecargo2').value) || 0.50,
+        3: parseFloat(document.getElementById('configRecargo3').value) || 0.50,
+        4: parseFloat(document.getElementById('configRecargo4').value) || 1.00,
+        6: parseFloat(document.getElementById('configRecargo6').value) || 1.00
+    };
+    
+    DB.guardarConfiguracion(config);
+    
+    actualizarTablaPrecios();
+    actualizarInfoPrecio();
+    actualizarDashboard();
+    actualizarListas();
+    
+    mostrarToast('✅ Configuración de precios guardada', 'success');
+}
+
+function guardarConfiguracionCodigos(e) {
+    e.preventDefault();
+    
+    const config = DB.getConfiguracion();
+    
+    config.codigoDesde = document.getElementById('configCodigoDesde').value.trim().toUpperCase() || 'A1';
+    config.codigoHasta = document.getElementById('configCodigoHasta').value.trim().toUpperCase() || 'Z999';
+    config.reinicioAuto = document.getElementById('configReinicioAuto').checked;
+    
+    DB.guardarConfiguracion(config);
+    
+    mostrarToast('✅ Configuración de códigos guardada', 'success');
+}
+
+function actualizarTablaPrecios() {
+    const config = DB.getConfiguracion();
+    const container = document.getElementById('tablaPreciosPreview');
+    if (!container) return;
+    
+    const moneda = config.moneda || 'Bs';
+    const precioBase = config.precioBase || 3;
+    const diasGratis = config.diasGratis || 5;
+    const recargo = config.recargo || 0.50;
+    
+    let html = `<table style="width:100%;font-size:13px;border-collapse:collapse;">
+        <thead>
+            <tr style="background:#f0edff;">
+                <th style="padding:6px 10px;text-align:left;">Días</th>
+                <th style="padding:6px 10px;text-align:left;">Precio</th>
+                <th style="padding:6px 10px;text-align:left;">Recargo</th>
+            </tr>
+        </thead>
+        <tbody>`;
+
+    for (let i = 1; i <= 20; i++) {
+        let precio = precioBase;
+        let recargoAplicado = 0;
+        if (i > diasGratis) {
+            const diasExtra = i - diasGratis;
+            recargoAplicado = diasExtra * recargo;
+            precio = precioBase + recargoAplicado;
+        }
+        const estado = i === diasGratis ? '⭐' : '';
+        const color = i > diasGratis ? '#E17055' : (i === diasGratis ? '#6C5CE7' : '#333');
+        
+        html += `<tr>
+            <td style="padding:4px 10px;border-bottom:1px solid #eee;font-weight:${i === diasGratis ? 'bold' : 'normal'};">
+                ${i} día${i > 1 ? 's' : ''} ${estado}
+            </td>
+            <td style="padding:4px 10px;border-bottom:1px solid #eee;font-weight:${i === diasGratis ? 'bold' : 'normal'};color:${color};">
+                ${moneda} ${Math.round(precio * 100) / 100}
+            </td>
+            <td style="padding:4px 10px;border-bottom:1px solid #eee;color:#666;">
+                ${i > diasGratis ? `+${moneda} ${Math.round(recargoAplicado * 100) / 100}` : '-'}
+            </td>
+        </tr>`;
+    }
+
+    html += `</tbody></table>`;
+    container.innerHTML = html;
+}
+
+function actualizarInfoPrecio() {
+    const config = DB.getConfiguracion();
+    const moneda = config.moneda || 'Bs';
+    
+    const infoBox = document.getElementById('infoPrecio');
+    if (infoBox) {
+        document.getElementById('infoPrecioBase').textContent = config.precioBase || 3;
+        document.getElementById('infoDiasGratis').textContent = config.diasGratis || 5;
+        document.getElementById('infoRecargo').textContent = config.recargo || 0.50;
+        document.getElementById('infoMoneda').textContent = moneda;
+        document.getElementById('infoMonedaRecargo').textContent = moneda;
+    }
+}
+
 // ----- GENERAR CÓDIGO MANUAL -----
 function generarCodigoManual() {
     const codigo = DB.generarCodigo();
@@ -114,6 +251,8 @@ function guardarManual(e) {
         return;
     }
     
+    const config = DB.getConfiguracion();
+    
     const paquete = {
         codigo: codigo,
         clienteNombre: nombre,
@@ -121,6 +260,7 @@ function guardarManual(e) {
         detalle: detalle || '',
         quienDejo: quienDejo || '',
         fechaIngreso: new Date().toISOString().split('T')[0],
+        precioBase: config.precioBase || 3,
         estado: 'pendiente',
         pagado: false
     };
@@ -158,7 +298,6 @@ function autocompletarRegistro() {
         return;
     }
 
-    // Crear sugerencias
     box.innerHTML = clientes.map(c => `
         <div class="suggestion-item" onclick="seleccionarClienteRegistro(${c.id})">
             <div>
@@ -245,8 +384,11 @@ function verPaquetesCliente(nombre) {
     let msg = `👤 ${nombre}\n📦 ${paquetes.length} paquetes (${pendientes.length} pendientes)\n\n`;
     msg += `📌 CÓDIGOS:\n`;
     paquetes.forEach(p => {
+        const deuda = DB.calcularDeuda(p);
+        const dias = DB.calcularDias(p.fechaIngreso);
         const estado = p.estado === 'entregado' ? '✅' : '⏳';
-        msg += `  ${p.codigo} ${estado} ${p.detalle || ''}\n`;
+        const moneda = DB.getConfiguracion().moneda || 'Bs';
+        msg += `  ${p.codigo} ${estado} ${moneda} ${deuda} (${dias}d) ${p.detalle || ''}\n`;
     });
     alert(msg);
 }
@@ -268,7 +410,14 @@ function renderizarPaquetes(paquetes) {
         return;
     }
 
+    const moneda = DB.getConfiguracion().moneda || 'Bs';
+
     tbody.innerHTML = paquetes.map(p => {
+        const deuda = DB.calcularDeuda(p);
+        const dias = DB.calcularDias(p.fechaIngreso);
+        const precioBase = p.precioBase || DB.getConfiguracion().precioBase || 3;
+        const tieneRecargo = dias > (DB.getConfiguracion().diasGratis || 5);
+        
         const estadoDisplay = {
             'pendiente': '⏳ Pendiente',
             'entregado': '✅ Entregado'
@@ -286,7 +435,10 @@ function renderizarPaquetes(paquetes) {
                 <td>${p.clienteCelular || '-'}</td>
                 <td>${p.detalle || '-'}</td>
                 <td>${p.fechaIngreso}</td>
-                <td><span class="badge ${badgeClass}">${estadoDisplay}</span></td>
+                <td>
+                    <span class="badge ${badgeClass}">${estadoDisplay}</span>
+                    ${tieneRecargo ? ' <span style="color:#E17055;font-size:11px;">💰 Recargo</span>' : ''}
+                </td>
                 <td>
                     ${p.estado === 'pendiente' ?
                         `<button onclick="entregarPaquete(${p.id})" class="btn-success btn-sm">✅</button>` :
@@ -305,7 +457,27 @@ function verDetallePaquete(id) {
     const p = DB.getPaquete(id);
     if (!p) return;
     
-    alert(`📦 PAQUETE ${p.codigo}\n\n👤 Cliente: ${p.clienteNombre}\n📱 Celular: ${p.clienteCelular || 'N/A'}\n📝 Detalle: ${p.detalle || 'Sin detalle'}\n👤 Quien lo dejó: ${p.quienDejo || 'No especificado'}\n📅 Fecha: ${p.fechaIngreso}\n📊 Estado: ${p.estado === 'pendiente' ? '⏳ Pendiente' : '✅ Entregado'}`);
+    const deuda = DB.calcularDeuda(p);
+    const dias = DB.calcularDias(p.fechaIngreso);
+    const config = DB.getConfiguracion();
+    const moneda = config.moneda || 'Bs';
+    const precioBase = p.precioBase || config.precioBase || 3;
+    const diasGratis = config.diasGratis || 5;
+    const tieneRecargo = dias > diasGratis;
+    const diasExtra = tieneRecargo ? dias - diasGratis : 0;
+    const recargo = config.recargo || 0.50;
+    
+    alert(`📦 PAQUETE ${p.codigo}\n\n` +
+        `👤 Cliente: ${p.clienteNombre}\n` +
+        `📱 Celular: ${p.clienteCelular || 'N/A'}\n` +
+        `📝 Detalle: ${p.detalle || 'Sin detalle'}\n` +
+        `👤 Quien lo dejó: ${p.quienDejo || 'No especificado'}\n` +
+        `📅 Fecha ingreso: ${p.fechaIngreso}\n` +
+        `📅 Días almacenado: ${dias} días\n` +
+        `💰 Precio base: ${moneda} ${precioBase}\n` +
+        `${tieneRecargo ? `📈 Recargo: ${moneda} ${(diasExtra * recargo).toFixed(2)} (${diasExtra} días extra)\n` : '📈 Sin recargo\n'}` +
+        `💰 Deuda total: ${moneda} ${deuda}\n` +
+        `📊 Estado: ${p.estado === 'pendiente' ? '⏳ Pendiente' : '✅ Entregado'}`);
 }
 
 function entregarPaquete(id) {
@@ -333,10 +505,23 @@ function eliminarPaquete(id) {
 // ===== DASHBOARD =====
 function actualizarDashboard() {
     const stats = DB.getEstadisticas();
+    const config = DB.getConfiguracion();
+    const moneda = config.moneda || 'Bs';
+    
     document.getElementById('totalPaquetes').textContent = stats.total;
     document.getElementById('pendientes').textContent = stats.pendientes;
     document.getElementById('entregados').textContent = stats.entregados;
     document.getElementById('totalClientes').textContent = stats.clientes;
+    
+    // Actualizar deuda e ingresos
+    const deudaElement = document.getElementById('totalDeuda');
+    const ingresosElement = document.getElementById('totalIngresos');
+    if (deudaElement) {
+        deudaElement.innerHTML = `${moneda} ${stats.totalDeuda}`;
+    }
+    if (ingresosElement) {
+        ingresosElement.innerHTML = `${moneda} ${stats.totalIngresos}`;
+    }
 
     const ultimos = DB.getUltimosPaquetes(5);
     const tbody = document.getElementById('ultimosPaquetes');
@@ -365,26 +550,6 @@ function actualizarListas() {
     renderizarPaquetes(paquetes);
 }
 
-// ===== CONFIGURACIÓN =====
-function cargarConfiguracion() {
-    const config = DB.getConfiguracion();
-    document.getElementById('configCodigoDesde').value = config.codigoDesde || 'A1';
-    document.getElementById('configCodigoHasta').value = config.codigoHasta || 'Z999';
-    document.getElementById('configReinicioAuto').checked = config.reinicioAuto !== false;
-}
-
-function guardarConfiguracion(e) {
-    e.preventDefault();
-    const config = {
-        codigoDesde: document.getElementById('configCodigoDesde').value.trim().toUpperCase() || 'A1',
-        codigoHasta: document.getElementById('configCodigoHasta').value.trim().toUpperCase() || 'Z999',
-        reinicioAuto: document.getElementById('configReinicioAuto').checked
-    };
-    
-    DB.guardarConfiguracion(config);
-    mostrarToast('✅ Configuración guardada', 'success');
-}
-
 // ===== WHATSAPP =====
 function abrirWhatsAppGlobal() {
     const clientes = DB.getClientes();
@@ -406,14 +571,20 @@ function exportarLista() {
         return;
     }
     
+    const config = DB.getConfiguracion();
+    const moneda = config.moneda || 'Bs';
+    
     let texto = '=== LISTA DE PAQUETES ===\n\n';
     texto += `Fecha: ${new Date().toLocaleDateString()}\n`;
-    texto += `Total: ${paquetes.length} paquetes\n\n`;
-    texto += 'Código | Cliente | Celular | Detalle | Estado\n';
-    texto += '='.repeat(60) + '\n';
+    texto += `Total: ${paquetes.length} paquetes\n`;
+    texto += `Moneda: ${moneda}\n\n`;
+    texto += 'Código | Cliente | Celular | Detalle | Días | Deuda | Estado\n';
+    texto += '='.repeat(80) + '\n';
     
     paquetes.forEach(p => {
-        texto += `${p.codigo} | ${p.clienteNombre} | ${p.clienteCelular || '-'} | ${p.detalle || '-'} | ${p.estado}\n`;
+        const deuda = DB.calcularDeuda(p);
+        const dias = DB.calcularDias(p.fechaIngreso);
+        texto += `${p.codigo} | ${p.clienteNombre} | ${p.clienteCelular || '-'} | ${p.detalle || '-'} | ${dias} | ${moneda}${deuda} | ${p.estado}\n`;
     });
     
     const blob = new Blob([texto], { type: 'text/plain;charset=utf-8' });
@@ -434,6 +605,7 @@ function cargarDatosEjemplo() {
     actualizarDashboard();
     actualizarListas();
     actualizarBadge();
+    generarCodigoManual();
 }
 
 function limpiarDatos() {
@@ -475,40 +647,45 @@ function actualizarBadge() {
 
 // ===== AYUDA =====
 function mostrarAyuda() {
+    const config = DB.getConfiguracion();
+    const moneda = config.moneda || 'Bs';
     alert(`🌙 MEDIA LUNA - Control de Paquetes
 
-📷 ESCÁNER (PRIMORDIAL):
+📷 ESCÁNER (GUARDADO AUTOMÁTICO):
 1. Ve a "Escanear Ticket"
 2. Presiona "ACTIVAR CÁMARA"
-3. Enfoca el código del ticket (A1, B25, etc.)
-4. Si el código NO existe → Se abre formulario para completar datos
-5. Si el código YA existe → Muestra la información del paquete
+3. Enfoca el código QR del ticket
+4. El sistema LEE y GUARDA AUTOMÁTICAMENTE:
+   • Código (A1, B25, etc.)
+   • Nombre del cliente
+   • Celular
+   • Detalle
+   • Fecha del ticket
+   • Precio base (según configuración)
+5. Si el código YA existe → Muestra la información
+
+💰 CONFIGURACIÓN DE PRECIOS:
+• Moneda: ${moneda}
+• Precio base: ${moneda} ${config.precioBase}
+• Días gratis: ${config.diasGratis}
+• Recargo diario: ${moneda} ${config.recargo}
+• Recargos por precio: Bs2→${config.recargosPorPrecio?.[2]||0.50}, Bs3→${config.recargosPorPrecio?.[3]||0.50}, Bs4→${config.recargosPorPrecio?.[4]||1.00}, Bs6→${config.recargosPorPrecio?.[6]||1.00}
 
 📝 REGISTRO MANUAL:
 • Usa esta opción cuando no tengas ticket físico
 • El código se genera automáticamente (A1 → Z999)
-• Al llegar a Z999, reinicia desde A1
 
 📋 LISTA DE PAQUETES:
-• Todos los paquetes registrados
-• Filtra por estado (Pendiente/Entregado)
-• Exporta la lista a archivo de texto
+• Todos los paquetes registrados con su deuda calculada
+• Filtra por estado
+• Exporta a archivo de texto
 
-👤 CLIENTES:
-• Registra clientes frecuentes
-• Busca por nombre o celular
-
-⚙️ CONFIGURACIÓN:
-• Cambia el rango de códigos
-• Activa/desactiva el reinicio automático
-
-📦 Códigos: A1 hasta Z999`);
+📦 Códigos: A1 hasta Z999 (se reinicia automáticamente)`);
 }
 
 // ===== EXPORTAR =====
 window.cambiarPagina = cambiarPagina;
 window.toggleSidebar = toggleSidebar;
-window.agregarTicket = function() { cambiarPagina('registro'); };
 window.mostrarFormCliente = mostrarFormCliente;
 window.ocultarFormCliente = ocultarFormCliente;
 window.guardarCliente = guardarCliente;
@@ -526,9 +703,11 @@ window.actualizarDashboard = actualizarDashboard;
 window.actualizarListas = actualizarListas;
 window.actualizarBadge = actualizarBadge;
 window.cargarConfiguracion = cargarConfiguracion;
-window.guardarConfiguracion = guardarConfiguracion;
+window.guardarConfiguracionPrecios = guardarConfiguracionPrecios;
+window.guardarConfiguracionCodigos = guardarConfiguracionCodigos;
 window.cargarDatosEjemplo = cargarDatosEjemplo;
 window.limpiarDatos = limpiarDatos;
 window.seleccionarClienteRegistro = seleccionarClienteRegistro;
 window.generarCodigoManual = generarCodigoManual;
 window.guardarManual = guardarManual;
+window.eliminarDesdeScanner = eliminarDesdeScanner;

@@ -1,7 +1,7 @@
 {
     "name": "MEDIA LUNA - Control de Paquetes",
     "short_name": "Paquetería ML",
-    "description": "Sistema de control de paquetería con precios configurables",
+    "description": "Sistema de control de paquetería con escáner automático",
     "start_url": "index.html",
     "display": "standalone",
     "background_color": "#F0F2F8",

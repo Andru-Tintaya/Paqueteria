@@ -3,9 +3,31 @@
 const DB = {
     // ----- CONFIGURACIÓN POR DEFECTO -----
     CONFIG_DEFAULT: {
+        // Configuración de códigos
         codigoDesde: 'A1',
         codigoHasta: 'Z999',
-        reinicioAuto: true
+        reinicioAuto: true,
+        // ===== CONFIGURACIÓN DE PRECIOS =====
+        moneda: 'Bs',
+        precioBase: 3,
+        diasGratis: 5,
+        recargo: 0.50,
+        // Precios para diferentes tipos (opcional)
+        preciosPorTipo: {
+            'Ropa': 3,
+            'Vajilla': 4,
+            'Juguetes': 3,
+            'Maquillaje': 3,
+            'Electrónicos': 6,
+            'Varios': 3
+        },
+        // Recargos según precio base
+        recargosPorPrecio: {
+            2: 0.50,
+            3: 0.50,
+            4: 1.00,
+            6: 1.00
+        }
     },
 
     // ----- OBTENER DATOS -----
@@ -146,6 +168,13 @@ const DB = {
         paquete.fechaIngreso = paquete.fechaIngreso || new Date().toISOString().split('T')[0];
         paquete.estado = paquete.estado || 'pendiente';
         paquete.pagado = paquete.pagado || false;
+        
+        // Si no tiene precio base, usar el de configuración
+        if (!paquete.precioBase) {
+            const config = this.getConfiguracion();
+            paquete.precioBase = config.precioBase || 3;
+        }
+        
         data.paquetes.push(paquete);
         
         // Actualizar último código
@@ -170,11 +199,14 @@ const DB = {
         const codigo = this.generarCodigo();
         if (!codigo) return null;
         
+        const config = this.getConfiguracion();
+        
         paquete.id = data.nextIdPaquete++;
         paquete.codigo = codigo;
         paquete.fechaIngreso = new Date().toISOString().split('T')[0];
         paquete.estado = 'pendiente';
         paquete.pagado = false;
+        paquete.precioBase = paquete.precioBase || config.precioBase || 3;
         data.paquetes.push(paquete);
         this.save(data);
         return paquete;
@@ -197,10 +229,18 @@ const DB = {
     },
 
     marcarEntregado: function(id) {
-        return this.updatePaquete(id, {
+        const paquete = this.getPaquete(id);
+        if (!paquete) return null;
+        
+        // Calcular deuda final antes de entregar
+        const deuda = this.calcularDeuda(paquete);
+        
+        const resultado = this.updatePaquete(id, {
             estado: 'entregado',
-            fechaEntrega: new Date().toISOString().split('T')[0]
+            fechaEntrega: new Date().toISOString().split('T')[0],
+            montoPagado: deuda
         });
+        return resultado;
     },
 
     searchPaquetes: function(termino, estado) {
@@ -219,25 +259,124 @@ const DB = {
         return paquetes;
     },
 
-    // ----- ESTADÍSTICAS -----
+    // ==========================================
+    // ===== CÁLCULO DE DEUDA CON CONFIGURACIÓN =====
+    // ==========================================
+    calcularDeuda: function(paquete) {
+        // Si ya está entregado y pagado, deuda 0
+        if (paquete.estado === 'entregado' && paquete.pagado) return 0;
+        if (paquete.pagado) return 0;
+
+        const config = this.getConfiguracion();
+        
+        // Obtener precio base del paquete o de configuración
+        let precioBase = paquete.precioBase || config.precioBase || 3;
+        const diasGratis = config.diasGratis || 5;
+        
+        // Obtener recargo según precio base
+        let recargo = config.recargo || 0.50;
+        if (config.recargosPorPrecio && config.recargosPorPrecio[precioBase]) {
+            recargo = config.recargosPorPrecio[precioBase];
+        }
+
+        const fechaIngreso = new Date(paquete.fechaIngreso);
+        const hoy = new Date();
+        const diffTime = Math.abs(hoy - fechaIngreso);
+        const diffDias = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        let deuda = precioBase;
+
+        if (diffDias > diasGratis) {
+            const diasExtra = diffDias - diasGratis;
+            deuda = precioBase + (diasExtra * recargo);
+        }
+
+        return Math.round(deuda * 100) / 100;
+    },
+
+    calcularDias: function(fechaIngreso) {
+        const fecha = new Date(fechaIngreso);
+        const hoy = new Date();
+        const diffTime = Math.abs(hoy - fecha);
+        return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    },
+
+    // Obtener información de deuda para mostrar en lista
+    getPaqueteConDeuda: function(paquete) {
+        const deuda = this.calcularDeuda(paquete);
+        const dias = this.calcularDias(paquete.fechaIngreso);
+        const config = this.getConfiguracion();
+        const moneda = config.moneda || 'Bs';
+        
+        // Determinar si tiene recargo
+        const tieneRecargo = dias > (config.diasGratis || 5);
+        const diasExtra = tieneRecargo ? dias - (config.diasGratis || 5) : 0;
+        
+        return {
+            ...paquete,
+            deuda: deuda,
+            dias: dias,
+            moneda: moneda,
+            tieneRecargo: tieneRecargo,
+            diasExtra: diasExtra,
+            precioBase: paquete.precioBase || config.precioBase || 3,
+            diasGratis: config.diasGratis || 5,
+            recargo: config.recargo || 0.50,
+            estadoDisplay: paquete.estado === 'pendiente' ? '⏳ Pendiente' : '✅ Entregado'
+        };
+    },
+
     getEstadisticas: function() {
         const paquetes = this.getPaquetes();
         const clientes = this.getClientes();
+        const config = this.getConfiguracion();
         const total = paquetes.length;
         const pendientes = paquetes.filter(p => p.estado === 'pendiente').length;
         const entregados = paquetes.filter(p => p.estado === 'entregado').length;
+
+        let totalDeuda = 0;
+        let totalIngresos = 0;
+        let paquetesConRecargo = 0;
+        
+        paquetes.forEach(p => {
+            const deuda = this.calcularDeuda(p);
+            if (p.estado !== 'entregado') {
+                totalDeuda += deuda;
+            }
+            if (p.estado === 'entregado') {
+                totalIngresos += deuda;
+            }
+            // Contar paquetes con recargo
+            const dias = this.calcularDias(p.fechaIngreso);
+            if (dias > (config.diasGratis || 5) && p.estado !== 'entregado') {
+                paquetesConRecargo++;
+            }
+        });
 
         return {
             total,
             pendientes,
             entregados,
-            clientes: clientes.length
+            clientes: clientes.length,
+            totalDeuda: Math.round(totalDeuda * 100) / 100,
+            totalIngresos: Math.round(totalIngresos * 100) / 100,
+            paquetesConRecargo
         };
     },
 
     getUltimosPaquetes: function(limit = 5) {
         const paquetes = this.getPaquetes().slice(-limit).reverse();
-        return paquetes;
+        return paquetes.map(p => this.getPaqueteConDeuda(p));
+    },
+
+    getPaquetesConDeuda: function() {
+        const paquetes = this.getPaquetes();
+        return paquetes.map(p => this.getPaqueteConDeuda(p));
+    },
+
+    getPaquetesPendientes: function() {
+        const paquetes = this.getPaquetes().filter(p => p.estado === 'pendiente');
+        return paquetes.map(p => this.getPaqueteConDeuda(p));
     },
 
     // ----- WHATSAPP -----
@@ -258,13 +397,59 @@ const DB = {
     // ===== DATOS DE EJEMPLO =====
     cargarDatosEjemplo: function() {
         const hoy = new Date();
+        const config = this.getConfiguracion();
         
         const paquetesEjemplo = [
-            { codigo: 'A1', clienteNombre: 'Juan Pérez', clienteCelular: '76543210', detalle: 'Camisa de vestir', quienDejo: 'María', fechaIngreso: this._formatDate(new Date(hoy.getTime() - 2*24*60*60*1000)), estado: 'pendiente' },
-            { codigo: 'A2', clienteNombre: 'María García', clienteCelular: '71234567', detalle: 'Vajilla de porcelana', quienDejo: 'Carlos', fechaIngreso: this._formatDate(new Date(hoy.getTime() - 1*24*60*60*1000)), estado: 'pendiente' },
-            { codigo: 'A3', clienteNombre: 'Pedro Rodríguez', clienteCelular: '79876543', detalle: 'Juguete', quienDejo: 'Ana', fechaIngreso: this._formatDate(new Date(hoy.getTime() - 3*24*60*60*1000)), estado: 'entregado' },
-            { codigo: 'A4', clienteNombre: 'Ana Martínez', clienteCelular: '72345678', detalle: 'Maquillaje', quienDejo: 'Luis', fechaIngreso: this._formatDate(hoy), estado: 'pendiente' },
-            { codigo: 'A5', clienteNombre: 'Carlos López', clienteCelular: '73456789', detalle: 'Electrónicos', quienDejo: 'Sofía', fechaIngreso: this._formatDate(new Date(hoy.getTime() - 5*24*60*60*1000)), estado: 'entregado' }
+            { 
+                codigo: 'A1', 
+                clienteNombre: 'Juan Pérez', 
+                clienteCelular: '76543210', 
+                detalle: 'Camisa de vestir', 
+                quienDejo: 'María',
+                precioBase: 3,
+                fechaIngreso: this._formatDate(new Date(hoy.getTime() - 2*24*60*60*1000)), 
+                estado: 'pendiente' 
+            },
+            { 
+                codigo: 'A2', 
+                clienteNombre: 'María García', 
+                clienteCelular: '71234567', 
+                detalle: 'Vajilla de porcelana', 
+                quienDejo: 'Carlos',
+                precioBase: 4,
+                fechaIngreso: this._formatDate(new Date(hoy.getTime() - 1*24*60*60*1000)), 
+                estado: 'pendiente' 
+            },
+            { 
+                codigo: 'A3', 
+                clienteNombre: 'Pedro Rodríguez', 
+                clienteCelular: '79876543', 
+                detalle: 'Juguete', 
+                quienDejo: 'Ana',
+                precioBase: 3,
+                fechaIngreso: this._formatDate(new Date(hoy.getTime() - 8*24*60*60*1000)), 
+                estado: 'pendiente' 
+            },
+            { 
+                codigo: 'A4', 
+                clienteNombre: 'Ana Martínez', 
+                clienteCelular: '72345678', 
+                detalle: 'Maquillaje', 
+                quienDejo: 'Luis',
+                precioBase: 3,
+                fechaIngreso: this._formatDate(new Date(hoy.getTime() - 3*24*60*60*1000)), 
+                estado: 'pendiente' 
+            },
+            { 
+                codigo: 'A5', 
+                clienteNombre: 'Carlos López', 
+                clienteCelular: '73456789', 
+                detalle: 'Electrónicos', 
+                quienDejo: 'Sofía',
+                precioBase: 6,
+                fechaIngreso: this._formatDate(new Date(hoy.getTime() - 10*24*60*60*1000)), 
+                estado: 'pendiente' 
+            }
         ];
         
         // Limpiar datos existentes

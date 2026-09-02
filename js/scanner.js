@@ -1,10 +1,130 @@
-// ===== ESCÁNER QR (PRIMORDIAL) =====
+// ===== ESCÁNER QR (GUARDADO AUTOMÁTICO) =====
 
 let scannerInstance = null;
 let scannerActivo = false;
 let ultimoCodigoEscaneado = null;
 let datosEscaneados = null;
 
+// ===== FUNCIÓN PARA PARSEAR EL CONTENIDO DEL TICKET =====
+function parseTicketData(decodedText) {
+    // El ticket tiene este formato:
+    // A23
+    // Mayk Andru Tintaya
+    // 77714732
+    // detalle:delicado
+    // 02/09/2024
+    // MEDIA LUNA
+    
+    const lines = decodedText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    
+    let resultado = {
+        codigo: '',
+        nombre: '',
+        celular: '',
+        detalle: '',
+        fecha: '',
+        tienda: ''
+    };
+    
+    if (lines.length === 0) return resultado;
+    
+    // El código siempre es la primera línea (A1, B25, Z999)
+    const codigoMatch = lines[0].match(/^([A-Za-z])(\d+)$/);
+    if (codigoMatch) {
+        resultado.codigo = lines[0].toUpperCase();
+        lines.shift();
+    } else {
+        // Si no es código, buscar el código en cualquier línea
+        for (let i = 0; i < lines.length; i++) {
+            const match = lines[i].match(/^([A-Za-z])(\d+)$/);
+            if (match) {
+                resultado.codigo = lines[i].toUpperCase();
+                lines.splice(i, 1);
+                break;
+            }
+        }
+    }
+    
+    // Buscar nombre (suele ser la segunda línea, que no es código ni número)
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        // Si no es un número de celular y no tiene ":" y no es "MEDIA LUNA"
+        if (!line.match(/^\d{7,10}$/) && 
+            !line.includes(':') && 
+            line.toLowerCase() !== 'media luna' &&
+            line.length > 2) {
+            resultado.nombre = line;
+            lines.splice(i, 1);
+            break;
+        }
+    }
+    
+    // Buscar celular (número de 7 a 10 dígitos)
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].replace(/\s/g, '');
+        if (line.match(/^\d{7,10}$/)) {
+            resultado.celular = line;
+            lines.splice(i, 1);
+            break;
+        }
+    }
+    
+    // Buscar detalle (línea con "detalle:" o "Detalle:")
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (line.toLowerCase().includes('detalle')) {
+            const detalleParts = line.split(':');
+            if (detalleParts.length > 1) {
+                resultado.detalle = detalleParts.slice(1).join(':').trim();
+            } else {
+                resultado.detalle = line;
+            }
+            lines.splice(i, 1);
+            break;
+        }
+    }
+    
+    // Si no se encontró detalle, usar la siguiente línea que no sea fecha ni tienda
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (!line.includes('/') && 
+            line.toLowerCase() !== 'media luna' && 
+            !line.match(/^\d{7,10}$/)) {
+            resultado.detalle = line;
+            lines.splice(i, 1);
+            break;
+        }
+    }
+    
+    // Buscar fecha (formato dd/mm/yyyy o dd/mm/yy)
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (line.match(/\d{1,2}\/\d{1,2}\/\d{2,4}/)) {
+            resultado.fecha = line;
+            lines.splice(i, 1);
+            break;
+        }
+    }
+    
+    // Buscar tienda (MEDIA LUNA)
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].toLowerCase();
+        if (line.includes('media luna') || line.includes('medialuna')) {
+            resultado.tienda = 'MEDIA LUNA';
+            lines.splice(i, 1);
+            break;
+        }
+    }
+    
+    // Si no se encontró nombre, usar la primera línea restante
+    if (!resultado.nombre && lines.length > 0) {
+        resultado.nombre = lines[0];
+    }
+    
+    return resultado;
+}
+
+// ===== INICIAR ESCÁNER =====
 function iniciarScanner() {
     const container = document.getElementById('scannerContainer');
     const btnIniciar = document.getElementById('btnIniciarScanner');
@@ -49,7 +169,7 @@ function iniciarScanner() {
                 document.getElementById('scannerResult').classList.add('hidden');
                 document.getElementById('scannerResult').style.display = 'none';
                 document.getElementById('formularioRapido').classList.add('hidden');
-                mostrarToast('📷 Cámara activada - Escanea el código del ticket', 'success');
+                mostrarToast('📷 Cámara activada - Escanea el ticket', 'success');
             })
             .catch(err => {
                 console.error('Error al iniciar scanner:', err);
@@ -67,6 +187,7 @@ function iniciarScanner() {
     }
 }
 
+// ===== DETENER ESCÁNER =====
 function detenerScanner() {
     if (scannerInstance && scannerActivo) {
         scannerInstance.stop()
@@ -89,52 +210,145 @@ function detenerScanner() {
     }
 }
 
+// ===== ÉXITO AL ESCANEAR - GUARDADO AUTOMÁTICO =====
 function onScanSuccess(decodedText, decodedResult) {
-    console.log('📷 Código escaneado:', decodedText);
+    console.log('📷 Ticket escaneado:', decodedText);
     
     // Detener scanner automáticamente
     detenerScanner();
     
-    // Limpiar el texto escaneado (quitar espacios, saltos de línea)
-    let codigo = decodedText.trim().replace(/\s/g, '');
-    // Si es muy largo, solo tomar la primera parte (por si tiene más texto)
-    if (codigo.length > 6) {
-        // Buscar formato de código (letra + número)
-        const match = codigo.match(/^([A-Za-z])(\d+)/);
-        if (match) {
-            codigo = match[1].toUpperCase() + match[2];
-        } else {
-            // Si no coincide, usar los primeros 4 caracteres
-            codigo = codigo.substring(0, 4).toUpperCase();
-        }
+    // Parsear los datos del ticket
+    const datos = parseTicketData(decodedText);
+    console.log('📊 Datos parseados:', datos);
+    
+    if (!datos.codigo) {
+        mostrarToast('❌ No se pudo leer el código del ticket', 'error');
+        setTimeout(() => {
+            reiniciarScanner();
+        }, 2000);
+        return;
     }
     
-    ultimoCodigoEscaneado = codigo;
-    document.getElementById('ultimoCodigoEscaner').textContent = `Último: ${codigo}`;
+    ultimoCodigoEscaneado = datos.codigo;
+    datosEscaneados = datos;
+    document.getElementById('ultimoCodigoEscaner').textContent = `Último: ${datos.codigo}`;
     
-    // Buscar si el paquete ya existe
-    const paqueteExistente = DB.getPaqueteByCodigo(codigo);
+    // Verificar si el paquete ya existe
+    const paqueteExistente = DB.getPaqueteByCodigo(datos.codigo);
     
     if (paqueteExistente) {
-        // Si existe, mostrar información
+        // Si ya existe, mostrar información
         mostrarPaqueteEscaneado(paqueteExistente);
         document.getElementById('formularioRapido').classList.add('hidden');
+        mostrarToast(`📦 Paquete ${datos.codigo} ya está registrado`, 'warning');
     } else {
-        // Si no existe, mostrar formulario para completar datos
-        mostrarFormularioRapido(codigo);
-        document.getElementById('scannerResult').classList.add('hidden');
-        document.getElementById('scannerResult').style.display = 'none';
+        // ===== GUARDADO AUTOMÁTICO =====
+        const config = DB.getConfiguracion();
+        const precioBase = config.precioBase || 3;
+        
+        const nuevoPaquete = {
+            codigo: datos.codigo,
+            clienteNombre: datos.nombre || 'Cliente sin nombre',
+            clienteCelular: datos.celular || '',
+            detalle: datos.detalle || '',
+            quienDejo: '',
+            fechaIngreso: new Date().toISOString().split('T')[0],
+            fechaTicket: datos.fecha || '',
+            tienda: datos.tienda || 'MEDIA LUNA',
+            precioBase: precioBase,
+            estado: 'pendiente',
+            pagado: false
+        };
+        
+        // Guardar automáticamente
+        const guardado = DB.addPaqueteDirecto(nuevoPaquete);
+        
+        if (guardado) {
+            mostrarToast(`✅ Paquete ${datos.codigo} guardado automáticamente para ${datos.nombre || 'cliente'}`, 'success');
+            
+            // Mostrar el paquete escaneado con toda la información
+            const paqueteGuardado = DB.getPaqueteByCodigo(datos.codigo);
+            mostrarPaqueteEscaneado(paqueteGuardado);
+            
+            actualizarDashboard();
+            actualizarListas();
+            actualizarBadge();
+        } else {
+            mostrarToast(`❌ Error al guardar el paquete ${datos.codigo}`, 'error');
+        }
     }
-    
-    mostrarToast(`📷 Código escaneado: ${codigo}`, 'success');
 }
 
+// ===== ERROR AL ESCANEAR =====
 function onScanError(error) {
     if (error && error.includes('permission')) {
         console.warn('⚠️ Error de permisos:', error);
     }
 }
 
+// ===== MOSTRAR PAQUETE ESCANEADO (CON DEUDA Y PRECIOS) =====
+function mostrarPaqueteEscaneado(paquete) {
+    const infoDiv = document.getElementById('paqueteInfo');
+    const config = DB.getConfiguracion();
+    const moneda = config.moneda || 'Bs';
+    
+    // Calcular deuda y días
+    const deuda = DB.calcularDeuda(paquete);
+    const dias = DB.calcularDias(paquete.fechaIngreso);
+    const precioBase = paquete.precioBase || config.precioBase || 3;
+    const diasGratis = config.diasGratis || 5;
+    const tieneRecargo = dias > diasGratis;
+    const diasExtra = tieneRecargo ? dias - diasGratis : 0;
+    const recargo = config.recargo || 0.50;
+    
+    const estadoDisplay = {
+        'pendiente': '⏳ Pendiente',
+        'entregado': '✅ Entregado'
+    }[paquete.estado] || paquete.estado;
+    
+    const badgeClass = {
+        'pendiente': 'badge-pendiente',
+        'entregado': 'badge-entregado'
+    }[paquete.estado] || '';
+    
+    infoDiv.innerHTML = `
+        <div style="text-align:center;margin-bottom:10px;">
+            <span style="font-size:28px;font-weight:bold;color:#6C5CE7;">${paquete.codigo}</span>
+        </div>
+        <p><strong>👤 Cliente:</strong> ${paquete.clienteNombre}</p>
+        <p><strong>📱 Celular:</strong> ${paquete.clienteCelular || 'N/A'}</p>
+        <p><strong>📝 Detalle:</strong> ${paquete.detalle || 'Sin detalle'}</p>
+        <p><strong>👤 Quien lo dejó:</strong> ${paquete.quienDejo || 'No especificado'}</p>
+        <p><strong>📅 Fecha ingreso:</strong> ${paquete.fechaIngreso}</p>
+        ${paquete.fechaTicket ? `<p><strong>📅 Fecha ticket:</strong> ${paquete.fechaTicket}</p>` : ''}
+        <p><strong>📅 Días almacenado:</strong> ${dias} días</p>
+        <p><strong>💰 Precio base:</strong> ${moneda} ${precioBase}</p>
+        ${tieneRecargo ? `<p><strong>📈 Recargo:</strong> ${moneda} ${(diasExtra * recargo).toFixed(2)} (${diasExtra} días extra)</p>` : '<p><strong>📈 Recargo:</strong> Sin recargo</p>'}
+        <p><strong>💰 Deuda total:</strong> <span style="font-size:20px;font-weight:bold;color:${deuda > precioBase ? '#E17055' : '#00B894'};">${moneda} ${deuda}</span></p>
+        <p><strong>📊 Estado:</strong> <span class="badge ${badgeClass}">${estadoDisplay}</span></p>
+        <p><strong>💳 Pagado:</strong> ${paquete.pagado ? '✅ Sí' : '❌ No'}</p>
+    `;
+    
+    const resultDiv = document.getElementById('scannerResult');
+    resultDiv.classList.remove('hidden');
+    resultDiv.style.display = 'block';
+    
+    // Mostrar/ocultar botones según estado
+    const btnEntregar = document.getElementById('btnEntregarScanner');
+    const btnEliminar = document.getElementById('btnEliminarScanner');
+    
+    if (btnEntregar) {
+        btnEntregar.style.display = paquete.estado === 'pendiente' ? 'inline-flex' : 'none';
+        btnEntregar.textContent = paquete.estado === 'pendiente' ? '✅ Marcar Entregado' : '✅ Ya Entregado';
+    }
+    if (btnEliminar) {
+        btnEliminar.style.display = 'inline-flex';
+    }
+    
+    document.getElementById('formularioRapido').classList.add('hidden');
+}
+
+// ===== FORMULARIO RÁPIDO (SOLO SI FALLA EL PARSEO) =====
 function mostrarFormularioRapido(codigo) {
     const formContainer = document.getElementById('formularioRapido');
     formContainer.classList.remove('hidden');
@@ -151,6 +365,7 @@ function mostrarFormularioRapido(codigo) {
     formContainer.scrollIntoView({ behavior: 'smooth' });
 }
 
+// ===== GUARDAR DESDE FORMULARIO RÁPIDO =====
 function guardarPaqueteForm(e) {
     e.preventDefault();
     
@@ -171,6 +386,8 @@ function guardarPaqueteForm(e) {
         return;
     }
     
+    const config = DB.getConfiguracion();
+    
     const paquete = {
         codigo: codigo,
         clienteNombre: nombre,
@@ -178,6 +395,7 @@ function guardarPaqueteForm(e) {
         detalle: detalle || '',
         quienDejo: quienDejo || '',
         fechaIngreso: new Date().toISOString().split('T')[0],
+        precioBase: config.precioBase || 3,
         estado: 'pendiente',
         pagado: false
     };
@@ -203,60 +421,13 @@ function guardarPaqueteForm(e) {
     }, 1000);
 }
 
+// ===== CANCELAR FORMULARIO =====
 function cancelarFormulario() {
     document.getElementById('formularioRapido').classList.add('hidden');
     reiniciarScanner();
 }
 
-function mostrarPaqueteEscaneado(paquete) {
-    const clientes = DB.getClientes();
-    const infoDiv = document.getElementById('paqueteInfo');
-    
-    const estadoDisplay = {
-        'pendiente': '⏳ Pendiente',
-        'entregado': '✅ Entregado'
-    }[paquete.estado] || paquete.estado;
-    
-    const badgeClass = {
-        'pendiente': 'badge-pendiente',
-        'entregado': 'badge-entregado'
-    }[paquete.estado] || '';
-    
-    infoDiv.innerHTML = `
-        <p><strong>📌 Código:</strong> <span style="font-size:20px;font-weight:bold;color:#6C5CE7;">${paquete.codigo}</span></p>
-        <p><strong>👤 Cliente:</strong> ${paquete.clienteNombre}</p>
-        <p><strong>📱 Celular:</strong> ${paquete.clienteCelular || 'N/A'}</p>
-        <p><strong>📝 Detalle:</strong> ${paquete.detalle || 'Sin detalle'}</p>
-        <p><strong>👤 Quien lo dejó:</strong> ${paquete.quienDejo || 'No especificado'}</p>
-        <p><strong>📅 Fecha:</strong> ${paquete.fechaIngreso}</p>
-        <p><strong>📊 Estado:</strong> <span class="badge ${badgeClass}">${estadoDisplay}</span></p>
-    `;
-    
-    const resultDiv = document.getElementById('scannerResult');
-    resultDiv.classList.remove('hidden');
-    resultDiv.style.display = 'block';
-    
-    // Mostrar/ocultar botones según estado
-    const btnGuardar = document.querySelector('.scanner-actions .btn-success');
-    const btnEntregar = document.querySelector('.scanner-actions .btn-warning');
-    
-    if (btnGuardar) {
-        btnGuardar.style.display = 'none';
-    }
-    if (btnEntregar) {
-        btnEntregar.style.display = paquete.estado === 'pendiente' ? 'inline-flex' : 'none';
-        btnEntregar.textContent = paquete.estado === 'pendiente' ? '✅ Marcar Entregado' : '✅ Ya Entregado';
-    }
-    
-    document.getElementById('formularioRapido').classList.add('hidden');
-}
-
-function guardarDesdeScanner() {
-    // Esta función se usa cuando se escanea un código nuevo
-    // El formulario ya maneja el guardado
-    document.getElementById('paqueteForm').dispatchEvent(new Event('submit'));
-}
-
+// ===== MARCAR ENTREGADO DESDE SCANNER =====
 function marcarEntregadoDesdeScanner() {
     if (!ultimoCodigoEscaneado) {
         mostrarToast('⚠️ No hay paquete escaneado', 'warning');
@@ -274,18 +445,47 @@ function marcarEntregadoDesdeScanner() {
         return;
     }
     
-    if (confirm(`¿Marcar paquete ${paquete.codigo} como ENTREGADO?`)) {
+    const deuda = DB.calcularDeuda(paquete);
+    const moneda = DB.getConfiguracion().moneda || 'Bs';
+    
+    if (confirm(`¿Marcar paquete ${paquete.codigo} como ENTREGADO?\nDeuda: ${moneda} ${deuda}`)) {
         DB.marcarEntregado(paquete.id);
-        mostrarToast(`✅ Paquete ${paquete.codigo} entregado`, 'success');
-        mostrarPaqueteEscaneado(DB.getPaqueteByCodigo(ultimoCodigoEscaneado));
+        mostrarToast(`✅ Paquete ${paquete.codigo} entregado - ${moneda} ${deuda}`, 'success');
+        const paqueteActualizado = DB.getPaqueteByCodigo(ultimoCodigoEscaneado);
+        mostrarPaqueteEscaneado(paqueteActualizado);
         actualizarDashboard();
         actualizarListas();
         actualizarBadge();
     }
 }
 
+// ===== ELIMINAR DESDE SCANNER =====
+function eliminarDesdeScanner() {
+    if (!ultimoCodigoEscaneado) {
+        mostrarToast('⚠️ No hay paquete escaneado', 'warning');
+        return;
+    }
+    
+    const paquete = DB.getPaqueteByCodigo(ultimoCodigoEscaneado);
+    if (!paquete) {
+        mostrarToast('❌ Paquete no encontrado', 'error');
+        return;
+    }
+    
+    if (confirm(`¿Eliminar paquete ${paquete.codigo}? Esta acción no se puede deshacer.`)) {
+        DB.deletePaquete(paquete.id);
+        mostrarToast(`🗑️ Paquete ${paquete.codigo} eliminado`, 'error');
+        reiniciarScanner();
+        actualizarDashboard();
+        actualizarListas();
+        actualizarBadge();
+    }
+}
+
+// ===== REINICIAR SCANNER =====
 function reiniciarScanner() {
     ultimoCodigoEscaneado = null;
+    datosEscaneados = null;
     document.getElementById('scannerResult').classList.add('hidden');
     document.getElementById('scannerResult').style.display = 'none';
     document.getElementById('formularioRapido').classList.add('hidden');
@@ -294,6 +494,7 @@ function reiniciarScanner() {
     }
 }
 
+// ===== BUSCAR POR CÓDIGO MANUAL =====
 function buscarPorCodigo() {
     const codigoInput = document.getElementById('codigoManual');
     let codigo = codigoInput.value.trim().toUpperCase();
@@ -331,6 +532,7 @@ function buscarPorCodigo() {
     codigoInput.value = '';
 }
 
+// ===== EVENTO AL CAMBIAR DE PÁGINA =====
 document.addEventListener('pageChange', function(e) {
     if (e.detail && e.detail.page !== 'escaner') {
         if (scannerActivo) {
