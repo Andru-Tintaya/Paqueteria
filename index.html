@@ -9,7 +9,8 @@
     <meta name="description" content="Sistema de control de paquetería" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="css/style.css" />
-    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <!-- ===== TESSERACT.JS PARA OCR ===== -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
 <body>
 
@@ -124,20 +125,20 @@
             </div>
         </section>
 
-        <!-- ===== ESCÁNER (CON 2 MODOS Y BOTÓN FORZAR) ===== -->
+        <!-- ===== ESCÁNER ===== -->
         <section id="escaner" class="page">
             <div class="page-header">
                 <h2>📷 Escanear Ticket</h2>
                 <span class="badge-info" id="ultimoCodigoEscaner">Último: --</span>
             </div>
 
-            <!-- ===== SELECTOR DE MODO ===== -->
+            <!-- SELECTOR DE MODO -->
             <div class="card" style="background:#f0edff;border:2px solid #6C5CE7;">
                 <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
-                    <button id="modoRegistro" class="btn-primary" style="flex:1;min-width:120px;" onclick="cambiarModoScanner('registro')">
+                    <button id="modoRegistro" class="btn-primary" style="flex:1;min-width:120px;" onclick="window.cambiarModoScanner('registro')">
                         <span id="modoRegistroLabel">📝 Modo Registro</span>
                     </button>
-                    <button id="modoConsulta" class="btn-secondary" style="flex:1;min-width:120px;" onclick="cambiarModoScanner('consulta')">
+                    <button id="modoConsulta" class="btn-secondary" style="flex:1;min-width:120px;" onclick="window.cambiarModoScanner('consulta')">
                         <span id="modoConsultaLabel">🔍 Modo Consulta</span>
                     </button>
                 </div>
@@ -148,82 +149,102 @@
 
             <div class="card scanner-card">
                 <div class="scanner-controls" style="display:flex;gap:8px;flex-wrap:wrap;">
-                    <button onclick="iniciarScanner()" class="btn-primary" id="btnIniciarScanner" style="flex:1;">
+                    <button onclick="window.iniciarScanner()" class="btn-primary" id="btnIniciarScanner" style="flex:1;">
                         📷 ACTIVAR CÁMARA
                     </button>
-                    <button onclick="forzarScanner()" class="btn-warning" id="btnForzarScanner" style="flex:1;">
+                    <button onclick="window.forzarScanner()" class="btn-warning" id="btnForzarScanner" style="flex:1;">
                         🔄 FORZAR ESCÁNER
                     </button>
-                    <button onclick="detenerScanner()" class="btn-danger hidden" id="btnDetenerScanner" style="flex:1;">
+                    <button onclick="window.detenerScanner()" class="btn-danger hidden" id="btnDetenerScanner" style="flex:1;">
                         ⏹ DETENER
                     </button>
                 </div>
 
-                <div id="scannerContainer" class="scanner-container hidden">
-                    <div id="reader"></div>
-                    <div id="scannerOverlay" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:white;text-align:center;pointer-events:none;opacity:0.7;">
-                        <div style="font-size:40px;">📷</div>
-                        <div style="font-size:14px;">Enfoca el código QR</div>
+                <!-- CONTENEDOR DE CÁMARA -->
+                <div id="scannerContainer" class="scanner-container hidden" style="position:relative;min-height:300px;background:#000;border-radius:12px;overflow:hidden;">
+                    <!-- El video se inserta aquí -->
+                    
+                    <!-- GUÍA VISUAL -->
+                    <div id="scannerGuide" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:5;">
+                        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:75%;max-width:350px;height:55%;border:3px dashed rgba(255,255,255,0.5);border-radius:16px;box-shadow:0 0 40px rgba(108,92,231,0.15);">
+                            <!-- Esquinas -->
+                            <div style="position:absolute;top:-3px;left:-3px;width:25px;height:25px;border-top:4px solid #6C5CE7;border-left:4px solid #6C5CE7;border-radius:4px 0 0 0;"></div>
+                            <div style="position:absolute;top:-3px;right:-3px;width:25px;height:25px;border-top:4px solid #6C5CE7;border-right:4px solid #6C5CE7;border-radius:0 4px 0 0;"></div>
+                            <div style="position:absolute;bottom:-3px;left:-3px;width:25px;height:25px;border-bottom:4px solid #6C5CE7;border-left:4px solid #6C5CE7;border-radius:0 0 0 4px;"></div>
+                            <div style="position:absolute;bottom:-3px;right:-3px;width:25px;height:25px;border-bottom:4px solid #6C5CE7;border-right:4px solid #6C5CE7;border-radius:0 0 4px 0;"></div>
+                            
+                            <!-- Texto -->
+                            <div style="position:absolute;bottom:15%;left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.8);font-size:13px;text-align:center;text-shadow:0 2px 10px rgba(0,0,0,0.7);background:rgba(0,0,0,0.5);padding:6px 16px;border-radius:20px;white-space:nowrap;">
+                                📄 Coloca el ticket dentro del recuadro
+                            </div>
+                            <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:rgba(255,255,255,0.08);font-size:48px;">📷</div>
+                        </div>
+                    </div>
+                    
+                    <!-- ESTADO DEL OCR -->
+                    <div id="ocrStatus" style="display:none;position:absolute;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.75);color:white;padding:8px 20px;border-radius:20px;font-size:13px;z-index:10;text-align:center;backdrop-filter:blur(4px);white-space:nowrap;">
+                        <span id="ocrStatusText">🔎 Leyendo ticket...</span>
+                        <span id="ocrConfidence" style="margin-left:12px;font-size:11px;opacity:0.7;">Confianza: --</span>
                     </div>
                 </div>
 
                 <!-- Resultado del escaneo -->
-                <div id="scannerResult" class="scanner-result hidden">
-                    <h3>📦 Ticket Escaneado</h3>
-                    <div id="paqueteInfo" class="paquete-info"></div>
-                    <div class="scanner-actions">
-                        <button onclick="marcarEntregadoDesdeScanner()" class="btn-success" id="btnEntregarScanner" style="display:none;">
+                <div id="scannerResult" class="scanner-result hidden" style="margin-top:16px;padding:16px;background:#e8f5e9;border-radius:12px;border:2px solid #4caf50;">
+                    <h3 style="color:#2e7d32;margin-bottom:8px;">📦 Ticket Escaneado</h3>
+                    <div id="paqueteInfo" class="paquete-info" style="background:white;padding:12px;border-radius:8px;margin:10px 0;"></div>
+                    <div class="scanner-actions" style="display:flex;gap:10px;flex-wrap:wrap;">
+                        <button onclick="window.marcarEntregadoDesdeScanner()" class="btn-success" id="btnEntregarScanner" style="display:none;padding:8px 16px;border-radius:8px;border:none;color:white;background:#2e7d32;cursor:pointer;">
                             ✅ Marcar Entregado
                         </button>
-                        <button onclick="eliminarDesdeScanner()" class="btn-danger" id="btnEliminarScanner" style="display:none;">
+                        <button onclick="window.eliminarDesdeScanner()" class="btn-danger" id="btnEliminarScanner" style="display:none;padding:8px 16px;border-radius:8px;border:none;color:white;background:#c62828;cursor:pointer;">
                             🗑️ Eliminar
                         </button>
-                        <button onclick="reiniciarScanner()" class="btn-secondary">
+                        <button onclick="window.reiniciarScanner()" class="btn-secondary" style="padding:8px 16px;border-radius:8px;border:none;background:#e0e0e0;cursor:pointer;">
                             🔄 Escanear otro
                         </button>
                     </div>
                 </div>
 
-                <!-- Entrada manual del código -->
-                <div class="manual-input">
-                    <p>📌 O ingresa el código manualmente:</p>
-                    <div class="input-group">
-                        <input type="text" id="codigoManual" placeholder="Ej: A1, B25, Z999" style="text-transform:uppercase;" />
-                        <button onclick="buscarPorCodigo()" class="btn-primary">Buscar</button>
+                <!-- Entrada manual -->
+                <div class="manual-input" style="margin-top:16px;padding-top:16px;border-top:2px solid #e0e0e0;">
+                    <p style="font-size:13px;color:#666;font-weight:500;">📌 O ingresa el código manualmente:</p>
+                    <div class="input-group" style="display:flex;gap:10px;margin-top:8px;">
+                        <input type="text" id="codigoManual" placeholder="Ej: A1, B25, Z999" style="flex:1;padding:10px 12px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;text-transform:uppercase;" />
+                        <button onclick="window.buscarPorCodigo()" class="btn-primary" style="padding:10px 18px;border-radius:8px;border:none;background:#6C5CE7;color:white;cursor:pointer;font-weight:600;">Buscar</button>
                     </div>
                 </div>
             </div>
 
             <!-- Formulario rápido -->
-            <div id="formularioRapido" class="card hidden">
-                <h3>📝 Registrar Nuevo Paquete</h3>
+            <div id="formularioRapido" class="card hidden" style="background:white;border-radius:16px;padding:20px;box-shadow:0 8px 32px rgba(108,92,231,0.12);margin-top:16px;">
+                <h3 style="font-size:16px;color:#2D3436;margin-bottom:12px;">📝 Registrar Nuevo Paquete</h3>
                 <p style="font-size:13px;color:#666;margin-bottom:12px;">
                     Completa los datos para registrar el paquete en el sistema.
                 </p>
-                <form id="paqueteForm" onsubmit="guardarPaqueteForm(event)">
-                    <div class="form-group">
-                        <label>📌 Código *</label>
-                        <input type="text" id="paqCodigo" required readonly style="background:#f0edff;font-weight:bold;font-size:18px;" />
+                <form id="paqueteForm" onsubmit="window.guardarPaqueteForm(event)">
+                    <div class="form-group" style="margin-bottom:14px;">
+                        <label style="display:block;font-size:13px;font-weight:600;color:#333;margin-bottom:4px;">📌 Código *</label>
+                        <input type="text" id="paqCodigo" required readonly style="width:100%;padding:10px 12px;border:2px solid #e0e0e0;border-radius:8px;font-size:18px;font-weight:bold;background:#f0edff;" />
                     </div>
-                    <div class="form-group">
-                        <label>👤 Nombre del Cliente *</label>
-                        <input type="text" id="paqNombre" required placeholder="Nombre completo" />
+                    <div class="form-group" style="margin-bottom:14px;">
+                        <label style="display:block;font-size:13px;font-weight:600;color:#333;margin-bottom:4px;">👤 Nombre del Cliente *</label>
+                        <input type="text" id="paqNombre" required placeholder="Nombre completo" style="width:100%;padding:10px 12px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;" />
                     </div>
-                    <div class="form-group">
-                        <label>📱 Celular</label>
-                        <input type="tel" id="paqCelular" placeholder="7XXXXXXX" />
+                    <div class="form-group" style="margin-bottom:14px;">
+                        <label style="display:block;font-size:13px;font-weight:600;color:#333;margin-bottom:4px;">📱 Celular</label>
+                        <input type="tel" id="paqCelular" placeholder="7XXXXXXX" style="width:100%;padding:10px 12px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;" />
                     </div>
-                    <div class="form-group">
-                        <label>📝 Detalle (opcional)</label>
-                        <input type="text" id="paqDetalle" placeholder="Descripción del paquete" />
+                    <div class="form-group" style="margin-bottom:14px;">
+                        <label style="display:block;font-size:13px;font-weight:600;color:#333;margin-bottom:4px;">📝 Detalle (opcional)</label>
+                        <input type="text" id="paqDetalle" placeholder="Descripción del paquete" style="width:100%;padding:10px 12px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;" />
                     </div>
-                    <div class="form-group">
-                        <label>👤 Quién lo dejó (opcional)</label>
-                        <input type="text" id="paqQuienDejo" placeholder="Persona que dejó el paquete" />
+                    <div class="form-group" style="margin-bottom:14px;">
+                        <label style="display:block;font-size:13px;font-weight:600;color:#333;margin-bottom:4px;">👤 Quién lo dejó (opcional)</label>
+                        <input type="text" id="paqQuienDejo" placeholder="Persona que dejó el paquete" style="width:100%;padding:10px 12px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;" />
                     </div>
-                    <div class="form-actions">
-                        <button type="submit" class="btn-primary">💾 Guardar Paquete</button>
-                        <button type="button" onclick="cancelarFormulario()" class="btn-secondary">Cancelar</button>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                        <button type="submit" class="btn-primary" style="flex:1;padding:10px 18px;border-radius:8px;border:none;background:#6C5CE7;color:white;cursor:pointer;font-weight:600;">💾 Guardar Paquete</button>
+                        <button type="button" onclick="window.cancelarFormulario()" class="btn-secondary" style="flex:1;padding:10px 18px;border-radius:8px;border:none;background:#e0e0e0;color:#333;cursor:pointer;font-weight:600;">Cancelar</button>
                     </div>
                 </form>
             </div>
@@ -240,27 +261,27 @@
                 <form id="registroManualForm" onsubmit="guardarManual(event)">
                     <div class="form-group">
                         <label>📌 Código *</label>
-                        <input type="text" id="regCodigo" required style="font-weight:bold;font-size:16px;background:#f0edff;" />
-                        <small>El código se genera automáticamente. Puedes modificarlo si es necesario.</small>
+                        <input type="text" id="regCodigo" required style="font-weight:bold;font-size:16px;background:#f0edff;width:100%;padding:10px 12px;border:2px solid #e0e0e0;border-radius:8px;" />
+                        <small style="font-size:11px;color:#666;">El código se genera automáticamente. Puedes modificarlo si es necesario.</small>
                     </div>
                     <div class="form-group">
                         <label>👤 Nombre del Cliente *</label>
-                        <input type="text" id="regNombre" required placeholder="Nombre completo" />
+                        <input type="text" id="regNombre" required placeholder="Nombre completo" style="width:100%;padding:10px 12px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;" />
                         <div id="suggestions" class="suggestions-box"></div>
                     </div>
                     <div class="form-group">
                         <label>📱 Celular</label>
-                        <input type="tel" id="regCelular" placeholder="7XXXXXXX" />
+                        <input type="tel" id="regCelular" placeholder="7XXXXXXX" style="width:100%;padding:10px 12px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;" />
                     </div>
                     <div class="form-group">
                         <label>📝 Detalle (opcional)</label>
-                        <input type="text" id="regDetalle" placeholder="Descripción del paquete" />
+                        <input type="text" id="regDetalle" placeholder="Descripción del paquete" style="width:100%;padding:10px 12px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;" />
                     </div>
                     <div class="form-group">
                         <label>👤 Quién lo dejó (opcional)</label>
-                        <input type="text" id="regQuienDejo" placeholder="Persona que dejó el paquete" />
+                        <input type="text" id="regQuienDejo" placeholder="Persona que dejó el paquete" style="width:100%;padding:10px 12px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;" />
                     </div>
-                    <button type="submit" class="btn-primary btn-block">💾 Guardar Paquete</button>
+                    <button type="submit" class="btn-primary btn-block" style="width:100%;padding:12px;border-radius:8px;border:none;background:#6C5CE7;color:white;cursor:pointer;font-weight:600;font-size:16px;">💾 Guardar Paquete</button>
                 </form>
             </div>
         </section>
@@ -270,32 +291,32 @@
             <div class="page-header">
                 <h2>📋 Lista de Paquetes</h2>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                    <select id="filtroEstado" onchange="filtrarPaquetes()" class="filter-select">
+                    <select id="filtroEstado" onchange="filtrarPaquetes()" class="filter-select" style="padding:8px 12px;border:2px solid #e0e0e0;border-radius:8px;font-size:13px;background:white;">
                         <option value="">Todos</option>
                         <option value="pendiente">⏳ Pendientes</option>
                         <option value="entregado">✅ Entregados</option>
                     </select>
-                    <button onclick="exportarLista()" class="btn-primary btn-sm">📥 Exportar</button>
+                    <button onclick="exportarLista()" class="btn-primary btn-sm" style="padding:6px 12px;border-radius:8px;border:none;background:#6C5CE7;color:white;cursor:pointer;font-size:12px;font-weight:600;">📥 Exportar</button>
                 </div>
             </div>
 
-            <div class="card">
-                <div class="search-bar">
-                    <span class="search-icon">🔍</span>
-                    <input type="text" id="buscarPaquete" placeholder="Buscar por código o cliente..." oninput="filtrarPaquetes()" />
+            <div class="card" style="background:white;border-radius:16px;padding:20px;box-shadow:0 8px 32px rgba(108,92,231,0.12);">
+                <div class="search-bar" style="position:relative;margin-bottom:12px;">
+                    <span class="search-icon" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:18px;">🔍</span>
+                    <input type="text" id="buscarPaquete" placeholder="Buscar por código o cliente..." oninput="filtrarPaquetes()" style="width:100%;padding:10px 12px 10px 44px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;" />
                 </div>
-                <div class="table-container">
-                    <table>
-                        <thead>
+                <div class="table-container" style="overflow-x:auto;">
+                    <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:420px;">
+                        <thead style="background:#f5f5f5;">
                             <tr>
-                                <th>Código</th>
-                                <th>Cliente</th>
-                                <th>Celular</th>
-                                <th>Detalle</th>
-                                <th>Días</th>
-                                <th>Deuda</th>
-                                <th>Estado</th>
-                                <th>Acciones</th>
+                                <th style="padding:8px 10px;text-align:left;font-weight:600;color:#1a237e;font-size:11px;text-transform:uppercase;">Código</th>
+                                <th style="padding:8px 10px;text-align:left;font-weight:600;color:#1a237e;font-size:11px;text-transform:uppercase;">Cliente</th>
+                                <th style="padding:8px 10px;text-align:left;font-weight:600;color:#1a237e;font-size:11px;text-transform:uppercase;">Celular</th>
+                                <th style="padding:8px 10px;text-align:left;font-weight:600;color:#1a237e;font-size:11px;text-transform:uppercase;">Detalle</th>
+                                <th style="padding:8px 10px;text-align:left;font-weight:600;color:#1a237e;font-size:11px;text-transform:uppercase;">Días</th>
+                                <th style="padding:8px 10px;text-align:left;font-weight:600;color:#1a237e;font-size:11px;text-transform:uppercase;">Deuda</th>
+                                <th style="padding:8px 10px;text-align:left;font-weight:600;color:#1a237e;font-size:11px;text-transform:uppercase;">Estado</th>
+                                <th style="padding:8px 10px;text-align:left;font-weight:600;color:#1a237e;font-size:11px;text-transform:uppercase;">Acciones</th>
                             </tr>
                         </thead>
                         <tbody id="listaPaquetes"></tbody>
@@ -308,42 +329,40 @@
         <section id="clientes" class="page">
             <div class="page-header">
                 <h2>👤 Clientes</h2>
-                <button onclick="mostrarFormCliente()" class="btn-primary btn-sm">
-                    ➕ Nuevo
-                </button>
+                <button onclick="mostrarFormCliente()" class="btn-primary btn-sm" style="padding:6px 12px;border-radius:8px;border:none;background:#6C5CE7;color:white;cursor:pointer;font-size:12px;font-weight:600;">➕ Nuevo</button>
             </div>
 
-            <div id="formCliente" class="card hidden">
-                <h3>Registrar Cliente</h3>
+            <div id="formCliente" class="card hidden" style="background:white;border-radius:16px;padding:20px;box-shadow:0 8px 32px rgba(108,92,231,0.12);margin-bottom:16px;">
+                <h3 style="font-size:16px;color:#2D3436;margin-bottom:12px;">Registrar Cliente</h3>
                 <form id="clienteForm" onsubmit="guardarCliente(event)">
-                    <div class="form-group">
-                        <label>Nombre *</label>
-                        <input type="text" id="clienteNombre" required placeholder="Nombre completo" />
+                    <div class="form-group" style="margin-bottom:14px;">
+                        <label style="display:block;font-size:13px;font-weight:600;color:#333;margin-bottom:4px;">Nombre *</label>
+                        <input type="text" id="clienteNombre" required placeholder="Nombre completo" style="width:100%;padding:10px 12px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;" />
                     </div>
-                    <div class="form-group">
-                        <label>Celular</label>
-                        <input type="tel" id="clienteCelular" placeholder="7XXXXXXX" />
+                    <div class="form-group" style="margin-bottom:14px;">
+                        <label style="display:block;font-size:13px;font-weight:600;color:#333;margin-bottom:4px;">Celular</label>
+                        <input type="tel" id="clienteCelular" placeholder="7XXXXXXX" style="width:100%;padding:10px 12px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;" />
                     </div>
-                    <div class="form-actions">
-                        <button type="submit" class="btn-primary">Guardar</button>
-                        <button type="button" onclick="ocultarFormCliente()" class="btn-secondary">Cancelar</button>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                        <button type="submit" class="btn-primary" style="flex:1;padding:10px 18px;border-radius:8px;border:none;background:#6C5CE7;color:white;cursor:pointer;font-weight:600;">Guardar</button>
+                        <button type="button" onclick="ocultarFormCliente()" class="btn-secondary" style="flex:1;padding:10px 18px;border-radius:8px;border:none;background:#e0e0e0;color:#333;cursor:pointer;font-weight:600;">Cancelar</button>
                     </div>
                 </form>
             </div>
 
-            <div class="card">
-                <div class="search-bar">
-                    <span class="search-icon">🔍</span>
-                    <input type="text" id="buscarCliente" placeholder="Buscar cliente..." oninput="filtrarClientes()" />
+            <div class="card" style="background:white;border-radius:16px;padding:20px;box-shadow:0 8px 32px rgba(108,92,231,0.12);">
+                <div class="search-bar" style="position:relative;margin-bottom:12px;">
+                    <span class="search-icon" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:18px;">🔍</span>
+                    <input type="text" id="buscarCliente" placeholder="Buscar cliente..." oninput="filtrarClientes()" style="width:100%;padding:10px 12px 10px 44px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;" />
                 </div>
-                <div class="table-container">
-                    <table>
-                        <thead>
+                <div class="table-container" style="overflow-x:auto;">
+                    <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:400px;">
+                        <thead style="background:#f5f5f5;">
                             <tr>
-                                <th>Nombre</th>
-                                <th>Celular</th>
-                                <th>Paq.</th>
-                                <th>Acciones</th>
+                                <th style="padding:8px 10px;text-align:left;font-weight:600;color:#1a237e;font-size:11px;text-transform:uppercase;">Nombre</th>
+                                <th style="padding:8px 10px;text-align:left;font-weight:600;color:#1a237e;font-size:11px;text-transform:uppercase;">Celular</th>
+                                <th style="padding:8px 10px;text-align:left;font-weight:600;color:#1a237e;font-size:11px;text-transform:uppercase;">Paq.</th>
+                                <th style="padding:8px 10px;text-align:left;font-weight:600;color:#1a237e;font-size:11px;text-transform:uppercase;">Acciones</th>
                             </tr>
                         </thead>
                         <tbody id="listaClientes"></tbody>
@@ -358,122 +377,109 @@
                 <h2>⚙️ Configuración</h2>
             </div>
 
-            <!-- CONFIGURACIÓN DE PRECIOS -->
-            <div class="card">
-                <h3>💰 Configuración de Precios</h3>
-                <p style="font-size:13px;color:#666;margin-bottom:16px;">
-                    Configura el precio base, días gratis y recargos. Los cambios se aplican automáticamente.
-                </p>
+            <div class="card" style="background:white;border-radius:16px;padding:20px;box-shadow:0 8px 32px rgba(108,92,231,0.12);margin-bottom:16px;">
+                <h3 style="font-size:16px;color:#2D3436;margin-bottom:12px;">💰 Configuración de Precios</h3>
+                <p style="font-size:13px;color:#666;margin-bottom:16px;">Configura el precio base, días gratis y recargos.</p>
 
                 <form id="configPreciosForm" onsubmit="guardarConfiguracionPrecios(event)">
-                    <div class="form-group">
-                        <label>💱 Símbolo de Moneda</label>
-                        <input type="text" id="configMoneda" value="Bs" maxlength="5" placeholder="Ej: Bs, $, S/." />
-                        <small>Ejemplo: Bs, $, S/., €, etc.</small>
+                    <div class="form-group" style="margin-bottom:14px;">
+                        <label style="display:block;font-size:13px;font-weight:600;color:#333;margin-bottom:4px;">💱 Símbolo de Moneda</label>
+                        <input type="text" id="configMoneda" value="Bs" maxlength="5" placeholder="Ej: Bs, $, S/." style="width:100%;padding:10px 12px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;" />
+                        <small style="font-size:11px;color:#666;">Ejemplo: Bs, $, S/., €, etc.</small>
                     </div>
 
-                    <div class="form-group">
-                        <label>💰 Precio Base</label>
-                        <input type="number" id="configPrecioBase" value="3" min="0.50" step="0.50" required />
-                        <small>Precio inicial del ticket</small>
+                    <div class="form-group" style="margin-bottom:14px;">
+                        <label style="display:block;font-size:13px;font-weight:600;color:#333;margin-bottom:4px;">💰 Precio Base</label>
+                        <input type="number" id="configPrecioBase" value="3" min="0.50" step="0.50" required style="width:100%;padding:10px 12px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;" />
+                        <small style="font-size:11px;color:#666;">Precio inicial del ticket</small>
                     </div>
 
-                    <div class="form-group">
-                        <label>📅 Días Gratis</label>
-                        <input type="number" id="configDiasGratis" value="5" min="1" max="60" required />
-                        <small>Días de almacenamiento sin recargo</small>
+                    <div class="form-group" style="margin-bottom:14px;">
+                        <label style="display:block;font-size:13px;font-weight:600;color:#333;margin-bottom:4px;">📅 Días Gratis</label>
+                        <input type="number" id="configDiasGratis" value="5" min="1" max="60" required style="width:100%;padding:10px 12px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;" />
+                        <small style="font-size:11px;color:#666;">Días de almacenamiento sin recargo</small>
                     </div>
 
-                    <div class="form-group">
-                        <label>📈 Recargo Diario</label>
-                        <input type="number" id="configRecargo" value="0.50" min="0.10" step="0.10" required />
-                        <small>Cobro adicional por cada día después de los días gratis</small>
+                    <div class="form-group" style="margin-bottom:14px;">
+                        <label style="display:block;font-size:13px;font-weight:600;color:#333;margin-bottom:4px;">📈 Recargo Diario</label>
+                        <input type="number" id="configRecargo" value="0.50" min="0.10" step="0.10" required style="width:100%;padding:10px 12px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;" />
+                        <small style="font-size:11px;color:#666;">Cobro adicional por cada día después de los días gratis</small>
                     </div>
 
-                    <div class="form-group">
-                        <label>📊 Recargos por Precio</label>
+                    <div class="form-group" style="margin-bottom:14px;">
+                        <label style="display:block;font-size:13px;font-weight:600;color:#333;margin-bottom:4px;">📊 Recargos por Precio</label>
                         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;">
                             <div>
                                 <label style="font-weight:normal;font-size:12px;">Bs 2 →</label>
-                                <input type="number" id="configRecargo2" value="0.50" min="0.10" step="0.10" style="width:80px;" />
+                                <input type="number" id="configRecargo2" value="0.50" min="0.10" step="0.10" style="width:80px;padding:6px 8px;border:2px solid #e0e0e0;border-radius:6px;font-size:13px;" />
                             </div>
                             <div>
                                 <label style="font-weight:normal;font-size:12px;">Bs 3 →</label>
-                                <input type="number" id="configRecargo3" value="0.50" min="0.10" step="0.10" style="width:80px;" />
+                                <input type="number" id="configRecargo3" value="0.50" min="0.10" step="0.10" style="width:80px;padding:6px 8px;border:2px solid #e0e0e0;border-radius:6px;font-size:13px;" />
                             </div>
                             <div>
                                 <label style="font-weight:normal;font-size:12px;">Bs 4 →</label>
-                                <input type="number" id="configRecargo4" value="1.00" min="0.10" step="0.10" style="width:80px;" />
+                                <input type="number" id="configRecargo4" value="1.00" min="0.10" step="0.10" style="width:80px;padding:6px 8px;border:2px solid #e0e0e0;border-radius:6px;font-size:13px;" />
                             </div>
                             <div>
                                 <label style="font-weight:normal;font-size:12px;">Bs 6 →</label>
-                                <input type="number" id="configRecargo6" value="1.00" min="0.10" step="0.10" style="width:80px;" />
+                                <input type="number" id="configRecargo6" value="1.00" min="0.10" step="0.10" style="width:80px;padding:6px 8px;border:2px solid #e0e0e0;border-radius:6px;font-size:13px;" />
                             </div>
                         </div>
-                        <small>Recargo diario según el precio base del paquete</small>
+                        <small style="font-size:11px;color:#666;">Recargo diario según el precio base del paquete</small>
                     </div>
 
-                    <div class="form-group">
-                        <label>📊 Tabla de Precios (Vista Previa)</label>
-                        <div id="tablaPreciosPreview" style="background:#f8f9fa;padding:12px;border-radius:8px;font-size:13px;max-height:300px;overflow-y:auto;">
-                            <!-- Se llena con JS -->
-                        </div>
+                    <div class="form-group" style="margin-bottom:14px;">
+                        <label style="display:block;font-size:13px;font-weight:600;color:#333;margin-bottom:4px;">📊 Tabla de Precios (Vista Previa)</label>
+                        <div id="tablaPreciosPreview" style="background:#f8f9fa;padding:12px;border-radius:8px;font-size:13px;max-height:300px;overflow-y:auto;"></div>
                     </div>
 
-                    <button type="submit" class="btn-primary btn-block">💾 Guardar Configuración de Precios</button>
+                    <button type="submit" class="btn-primary btn-block" style="width:100%;padding:12px;border-radius:8px;border:none;background:#6C5CE7;color:white;cursor:pointer;font-weight:600;font-size:16px;">💾 Guardar Configuración de Precios</button>
                 </form>
             </div>
 
-            <!-- CONFIGURACIÓN DE CÓDIGOS -->
-            <div class="card">
-                <h3>📌 Configuración de Códigos</h3>
+            <div class="card" style="background:white;border-radius:16px;padding:20px;box-shadow:0 8px 32px rgba(108,92,231,0.12);margin-bottom:16px;">
+                <h3 style="font-size:16px;color:#2D3436;margin-bottom:12px;">📌 Configuración de Códigos</h3>
                 <form id="configCodigosForm" onsubmit="guardarConfiguracionCodigos(event)">
-                    <div class="form-group">
-                        <label>📌 Rango de Códigos</label>
+                    <div class="form-group" style="margin-bottom:14px;">
+                        <label style="display:block;font-size:13px;font-weight:600;color:#333;margin-bottom:4px;">📌 Rango de Códigos</label>
                         <div style="display:flex;gap:10px;flex-wrap:wrap;">
                             <div style="flex:1;min-width:100px;">
                                 <label style="font-weight:normal;font-size:12px;">Desde</label>
-                                <input type="text" id="configCodigoDesde" value="A1" maxlength="4" style="text-transform:uppercase;" />
+                                <input type="text" id="configCodigoDesde" value="A1" maxlength="4" style="text-transform:uppercase;width:100%;padding:8px 10px;border:2px solid #e0e0e0;border-radius:6px;font-size:14px;" />
                             </div>
                             <div style="flex:1;min-width:100px;">
                                 <label style="font-weight:normal;font-size:12px;">Hasta</label>
-                                <input type="text" id="configCodigoHasta" value="Z999" maxlength="4" style="text-transform:uppercase;" />
+                                <input type="text" id="configCodigoHasta" value="Z999" maxlength="4" style="text-transform:uppercase;width:100%;padding:8px 10px;border:2px solid #e0e0e0;border-radius:6px;font-size:14px;" />
                             </div>
                         </div>
-                        <small>Formato: Letra + Número (ej: A1, B25, Z999)</small>
+                        <small style="font-size:11px;color:#666;">Formato: Letra + Número (ej: A1, B25, Z999)</small>
                     </div>
 
-                    <div class="form-group">
-                        <label>🔄 Reinicio automático</label>
+                    <div class="form-group" style="margin-bottom:14px;">
+                        <label style="display:block;font-size:13px;font-weight:600;color:#333;margin-bottom:4px;">🔄 Reinicio automático</label>
                         <div style="display:flex;gap:10px;align-items:center;">
-                            <input type="checkbox" id="configReinicioAuto" checked />
+                            <input type="checkbox" id="configReinicioAuto" checked style="width:18px;height:18px;" />
                             <label style="font-weight:normal;font-size:13px;">Reiniciar desde A1 al llegar al límite</label>
                         </div>
                     </div>
 
-                    <button type="submit" class="btn-primary btn-block">💾 Guardar Configuración de Códigos</button>
+                    <button type="submit" class="btn-primary btn-block" style="width:100%;padding:12px;border-radius:8px;border:none;background:#6C5CE7;color:white;cursor:pointer;font-weight:600;font-size:16px;">💾 Guardar Configuración de Códigos</button>
                 </form>
             </div>
 
-            <!-- DATOS DE EJEMPLO -->
-            <div class="card">
-                <h3>📋 Datos de Ejemplo</h3>
-                <p style="font-size:13px;color:#666;margin-bottom:12px;">
-                    Carga datos de ejemplo para probar el sistema.
-                </p>
-                <button onclick="cargarDatosEjemplo()" class="btn-secondary btn-block">
-                    📥 Cargar Datos de Ejemplo
-                </button>
-                <button onclick="limpiarDatos()" class="btn-danger btn-block" style="margin-top:8px;">
-                    🗑️ Limpiar Todos los Datos
-                </button>
+            <div class="card" style="background:white;border-radius:16px;padding:20px;box-shadow:0 8px 32px rgba(108,92,231,0.12);">
+                <h3 style="font-size:16px;color:#2D3436;margin-bottom:12px;">📋 Datos de Ejemplo</h3>
+                <p style="font-size:13px;color:#666;margin-bottom:12px;">Carga datos de ejemplo para probar el sistema.</p>
+                <button onclick="cargarDatosEjemplo()" class="btn-secondary btn-block" style="width:100%;padding:12px;border-radius:8px;border:none;background:#e0e0e0;color:#333;cursor:pointer;font-weight:600;font-size:16px;margin-bottom:8px;">📥 Cargar Datos de Ejemplo</button>
+                <button onclick="limpiarDatos()" class="btn-danger btn-block" style="width:100%;padding:12px;border-radius:8px;border:none;background:#c62828;color:white;cursor:pointer;font-weight:600;font-size:16px;">🗑️ Limpiar Todos los Datos</button>
             </div>
         </section>
 
     </main>
 
     <!-- ===== BOTÓN FLOTANTE WHATSAPP ===== -->
-    <button class="fab-whatsapp" onclick="abrirWhatsAppGlobal()" id="fabWhatsapp">
+    <button class="fab-whatsapp" onclick="abrirWhatsAppGlobal()" id="fabWhatsapp" style="position:fixed;bottom:24px;right:24px;width:58px;height:58px;border-radius:50%;background:linear-gradient(135deg,#25D366,#128C7E);color:white;border:none;font-size:30px;cursor:pointer;box-shadow:0 4px 20px rgba(37,211,102,0.4);z-index:500;">
         💬
     </button>
 

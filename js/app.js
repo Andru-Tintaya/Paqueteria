@@ -94,13 +94,11 @@ function toggleSidebar(forceState) {
 function cargarConfiguracion() {
     const config = DB.getConfiguracion();
     
-    // Precios
     document.getElementById('configMoneda').value = config.moneda || 'Bs';
     document.getElementById('configPrecioBase').value = config.precioBase || 3;
     document.getElementById('configDiasGratis').value = config.diasGratis || 5;
     document.getElementById('configRecargo').value = config.recargo || 0.50;
     
-    // Recargos por precio
     if (config.recargosPorPrecio) {
         document.getElementById('configRecargo2').value = config.recargosPorPrecio[2] || 0.50;
         document.getElementById('configRecargo3').value = config.recargosPorPrecio[3] || 0.50;
@@ -108,7 +106,6 @@ function cargarConfiguracion() {
         document.getElementById('configRecargo6').value = config.recargosPorPrecio[6] || 1.00;
     }
     
-    // Códigos
     document.getElementById('configCodigoDesde').value = config.codigoDesde || 'A1';
     document.getElementById('configCodigoHasta').value = config.codigoHasta || 'Z999';
     document.getElementById('configReinicioAuto').checked = config.reinicioAuto !== false;
@@ -127,7 +124,6 @@ function guardarConfiguracionPrecios(e) {
     config.diasGratis = parseInt(document.getElementById('configDiasGratis').value) || 5;
     config.recargo = parseFloat(document.getElementById('configRecargo').value) || 0.50;
     
-    // Guardar recargos por precio
     config.recargosPorPrecio = {
         2: parseFloat(document.getElementById('configRecargo2').value) || 0.50,
         3: parseFloat(document.getElementById('configRecargo3').value) || 0.50,
@@ -245,7 +241,6 @@ function guardarManual(e) {
         return;
     }
     
-    // Verificar si ya existe
     if (DB.getPaqueteByCodigo(codigo)) {
         mostrarToast('⚠️ El código ' + codigo + ' ya existe', 'error');
         return;
@@ -269,7 +264,6 @@ function guardarManual(e) {
     
     mostrarToast('✅ Paquete ' + codigo + ' guardado para ' + nombre, 'success');
     
-    // Limpiar formulario
     document.getElementById('regNombre').value = '';
     document.getElementById('regCelular').value = '';
     document.getElementById('regDetalle').value = '';
@@ -512,7 +506,6 @@ function actualizarDashboard() {
     document.getElementById('entregados').textContent = stats.entregados;
     document.getElementById('totalClientes').textContent = stats.clientes;
     
-    // Actualizar deuda e ingresos
     const deudaElement = document.getElementById('totalDeuda');
     const ingresosElement = document.getElementById('totalIngresos');
     if (deudaElement) {
@@ -650,178 +643,137 @@ function mostrarAyuda() {
     const config = DB.getConfiguracion();
     const moneda = config.moneda || 'Bs';
     alert('🌙 MEDIA LUNA - Control de Paquetes\n\n' +
-        '📷 ESCÁNER (GUARDADO AUTOMÁTICO):\n' +
+        '📷 ESCÁNER (OCR - LEE TICKETS IMPRESOS):\n' +
         '1. Ve a "Escanear Ticket"\n' +
         '2. Presiona "ACTIVAR CÁMARA"\n' +
-        '3. Enfoca el código QR del ticket\n' +
-        '4. El sistema LEE y GUARDA AUTOMÁTICAMENTE:\n' +
-        '   • Código (A1, B25, etc.)\n' +
-        '   • Nombre del cliente\n' +
-        '   • Celular\n' +
-        '   • Detalle\n' +
-        '   • Fecha del ticket\n' +
-        '   • Precio base (según configuración)\n' +
-        '5. Si el código YA existe → Muestra la información\n\n' +
+        '3. Coloca el ticket dentro del recuadro\n' +
+        '4. El sistema LEE el texto automáticamente\n' +
+        '5. Extrae: Código, Nombre, Celular, Detalle, Fecha\n\n' +
         '💰 CONFIGURACIÓN DE PRECIOS:\n' +
         '• Moneda: ' + moneda + '\n' +
         '• Precio base: ' + moneda + ' ' + config.precioBase + '\n' +
         '• Días gratis: ' + config.diasGratis + '\n' +
-        '• Recargo diario: ' + moneda + ' ' + config.recargo + '\n' +
-        '• Recargos por precio: Bs2→' + (config.recargosPorPrecio?.[2]||0.50) + ', Bs3→' + (config.recargosPorPrecio?.[3]||0.50) + ', Bs4→' + (config.recargosPorPrecio?.[4]||1.00) + ', Bs6→' + (config.recargosPorPrecio?.[6]||1.00) + '\n\n' +
+        '• Recargo diario: ' + moneda + ' ' + config.recargo + '\n\n' +
         '📝 REGISTRO MANUAL:\n' +
-        '• Usa esta opción cuando no tengas ticket físico\n' +
-        '• El código se genera automáticamente (A1 → Z999)\n\n' +
+        '• Código automático A1 → Z999\n\n' +
         '📋 LISTA DE PAQUETES:\n' +
-        '• Todos los paquetes registrados con su deuda calculada\n' +
+        '• Todos los paquetes con deuda calculada\n' +
         '• Filtra por estado\n' +
-        '• Exporta a archivo de texto\n\n' +
-        '📦 Códigos: A1 hasta Z999 (se reinicia automáticamente)');
+        '• Exporta a archivo de texto');
 }
 
 // ==========================================
-// ===== EXPORTAR FUNCIONES GLOBALES =====
+// ===== FUNCIONES DE REDIRECCIÓN A SCANNER (SIN RECURSIÓN) =====
 // ==========================================
+// Estas funciones SOLO redirigen a scanner.js sin llamarse a sí mismas
 
-// Funciones de navegación
-window.cambiarPagina = cambiarPagina;
-window.toggleSidebar = toggleSidebar;
-
-// Funciones de clientes
-window.mostrarFormCliente = mostrarFormCliente;
-window.ocultarFormCliente = ocultarFormCliente;
-window.guardarCliente = guardarCliente;
-window.filtrarClientes = filtrarClientes;
-window.verPaquetesCliente = verPaquetesCliente;
-
-// Funciones de paquetes
-window.filtrarPaquetes = filtrarPaquetes;
-window.entregarPaquete = entregarPaquete;
-window.eliminarPaquete = eliminarPaquete;
-window.verDetallePaquete = verDetallePaquete;
-
-// Funciones de configuración
-window.cargarConfiguracion = cargarConfiguracion;
-window.guardarConfiguracionPrecios = guardarConfiguracionPrecios;
-window.guardarConfiguracionCodigos = guardarConfiguracionCodigos;
-
-// Funciones de registro manual
-window.generarCodigoManual = generarCodigoManual;
-window.guardarManual = guardarManual;
-window.seleccionarClienteRegistro = seleccionarClienteRegistro;
-
-// Funciones de utilidad
-window.actualizarDashboard = actualizarDashboard;
-window.actualizarListas = actualizarListas;
-window.actualizarBadge = actualizarBadge;
-window.abrirWhatsAppGlobal = abrirWhatsAppGlobal;
-window.exportarLista = exportarLista;
-window.mostrarAyuda = mostrarAyuda;
-window.mostrarToast = mostrarToast;
-window.cargarDatosEjemplo = cargarDatosEjemplo;
-window.limpiarDatos = limpiarDatos;
-
-// ==========================================
-// ===== FUNCIONES DEL ESCÁNER (SIN RECURSIÓN) =====
-// ==========================================
-
-// Estas funciones redirigen a scanner.js sin recursión
 window.cambiarModoScanner = function(modo) {
-    // Buscar la función en el scope global (definida en scanner.js)
+    // Buscar la función en el objeto window (definida en scanner.js)
     if (typeof window._cambiarModoScanner === 'function') {
         window._cambiarModoScanner(modo);
-    } else if (typeof cambiarModoScanner === 'function') {
-        cambiarModoScanner(modo);
     } else {
-        console.warn('⚠️ cambiarModoScanner no está definida en scanner.js');
+        console.warn('⚠️ _cambiarModoScanner no está definida');
     }
 };
 
 window.forzarScanner = function() {
     if (typeof window._forzarScanner === 'function') {
         window._forzarScanner();
-    } else if (typeof forzarScanner === 'function') {
-        forzarScanner();
     } else {
-        console.warn('⚠️ forzarScanner no está definida en scanner.js');
+        console.warn('⚠️ _forzarScanner no está definida');
     }
 };
 
 window.iniciarScanner = function() {
     if (typeof window._iniciarScanner === 'function') {
         window._iniciarScanner();
-    } else if (typeof iniciarScanner === 'function') {
-        iniciarScanner();
     } else {
-        console.warn('⚠️ iniciarScanner no está definida en scanner.js');
+        console.warn('⚠️ _iniciarScanner no está definida');
     }
 };
 
 window.detenerScanner = function() {
     if (typeof window._detenerScanner === 'function') {
         window._detenerScanner();
-    } else if (typeof detenerScanner === 'function') {
-        detenerScanner();
     } else {
-        console.warn('⚠️ detenerScanner no está definida en scanner.js');
+        console.warn('⚠️ _detenerScanner no está definida');
     }
 };
 
 window.reiniciarScanner = function() {
     if (typeof window._reiniciarScanner === 'function') {
         window._reiniciarScanner();
-    } else if (typeof reiniciarScanner === 'function') {
-        reiniciarScanner();
     } else {
-        console.warn('⚠️ reiniciarScanner no está definida en scanner.js');
+        console.warn('⚠️ _reiniciarScanner no está definida');
     }
 };
 
 window.buscarPorCodigo = function() {
     if (typeof window._buscarPorCodigo === 'function') {
         window._buscarPorCodigo();
-    } else if (typeof buscarPorCodigo === 'function') {
-        buscarPorCodigo();
     } else {
-        console.warn('⚠️ buscarPorCodigo no está definida en scanner.js');
+        console.warn('⚠️ _buscarPorCodigo no está definida');
     }
 };
 
 window.marcarEntregadoDesdeScanner = function() {
     if (typeof window._marcarEntregadoDesdeScanner === 'function') {
         window._marcarEntregadoDesdeScanner();
-    } else if (typeof marcarEntregadoDesdeScanner === 'function') {
-        marcarEntregadoDesdeScanner();
     } else {
-        console.warn('⚠️ marcarEntregadoDesdeScanner no está definida en scanner.js');
+        console.warn('⚠️ _marcarEntregadoDesdeScanner no está definida');
     }
 };
 
 window.eliminarDesdeScanner = function() {
     if (typeof window._eliminarDesdeScanner === 'function') {
         window._eliminarDesdeScanner();
-    } else if (typeof eliminarDesdeScanner === 'function') {
-        eliminarDesdeScanner();
     } else {
-        console.warn('⚠️ eliminarDesdeScanner no está definida en scanner.js');
+        console.warn('⚠️ _eliminarDesdeScanner no está definida');
     }
 };
 
 window.guardarPaqueteForm = function(e) {
     if (typeof window._guardarPaqueteForm === 'function') {
         window._guardarPaqueteForm(e);
-    } else if (typeof guardarPaqueteForm === 'function') {
-        guardarPaqueteForm(e);
     } else {
-        console.warn('⚠️ guardarPaqueteForm no está definida en scanner.js');
+        console.warn('⚠️ _guardarPaqueteForm no está definida');
     }
 };
 
 window.cancelarFormulario = function() {
     if (typeof window._cancelarFormulario === 'function') {
         window._cancelarFormulario();
-    } else if (typeof cancelarFormulario === 'function') {
-        cancelarFormulario();
     } else {
-        console.warn('⚠️ cancelarFormulario no está definida en scanner.js');
+        console.warn('⚠️ _cancelarFormulario no está definida');
     }
 };
+
+// ==========================================
+// ===== EXPORTAR RESTO DE FUNCIONES =====
+// ==========================================
+window.cambiarPagina = cambiarPagina;
+window.toggleSidebar = toggleSidebar;
+window.mostrarFormCliente = mostrarFormCliente;
+window.ocultarFormCliente = ocultarFormCliente;
+window.guardarCliente = guardarCliente;
+window.filtrarClientes = filtrarClientes;
+window.filtrarPaquetes = filtrarPaquetes;
+window.entregarPaquete = entregarPaquete;
+window.eliminarPaquete = eliminarPaquete;
+window.verPaquetesCliente = verPaquetesCliente;
+window.verDetallePaquete = verDetallePaquete;
+window.abrirWhatsAppGlobal = abrirWhatsAppGlobal;
+window.exportarLista = exportarLista;
+window.mostrarAyuda = mostrarAyuda;
+window.mostrarToast = mostrarToast;
+window.actualizarDashboard = actualizarDashboard;
+window.actualizarListas = actualizarListas;
+window.actualizarBadge = actualizarBadge;
+window.cargarConfiguracion = cargarConfiguracion;
+window.guardarConfiguracionPrecios = guardarConfiguracionPrecios;
+window.guardarConfiguracionCodigos = guardarConfiguracionCodigos;
+window.cargarDatosEjemplo = cargarDatosEjemplo;
+window.limpiarDatos = limpiarDatos;
+window.seleccionarClienteRegistro = seleccionarClienteRegistro;
+window.generarCodigoManual = generarCodigoManual;
+window.guardarManual = guardarManual;
