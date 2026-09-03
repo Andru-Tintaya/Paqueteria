@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Escáner de Tickets Inteligente</title>
+    <title>Escáner de Tickets Dual</title>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
 
     <style>
@@ -61,7 +61,7 @@
         }
 
         .scan-guide::before {
-            content: "COLOCA TODO EL TICKET DENTRO";
+            content: "CÓDIGO ARRIBA / DATOS ABAJO";
             position: absolute;
             top: 5px;
             left: 50%;
@@ -170,7 +170,7 @@
 </head>
 <body>
 
-    <h1>📷 Escáner de Tickets</h1>
+    <h1>📷 Escáner de Tickets Dual</h1>
     
     <div class="camera-container">
         <video id="video" autoplay playsinline></video>
@@ -179,11 +179,11 @@
     
     <div class="controls">
         <button id="btn-start">📷 Abrir Cámara</button>
-        <button id="btn-scan" disabled>Escanear</button>
+        <button id="btn-scan" disabled>🔎 Tomar Foto y Unificar</button>
     </div>
     
     <div id="status">
-        Presiona "Abrir Cámara" y coloca TODO el ticket dentro de la pantalla.
+        Presiona "Abrir Cámara" y ubica el ticket dentro del recuadro.
     </div>
     
     <div class="form-container">
@@ -212,15 +212,18 @@
             <input type="text" id="extra" placeholder="MEDIA LUNA">
         </div>
         <div class="resultado" id="resultado">
-            El escaneo llenará automáticamente todos los campos.
+            El escaneo procesará ambas zonas unificadas.
         </div>
     </div>
 
-    <canvas id="canvas"></canvas>
+    <!-- Canales ocultos para procesamiento interno -->
+    <canvas id="canvas-foto"></canvas>
+    <canvas id="canvas-unificado"></canvas>
 
     <script>
         const video = document.getElementById("video");
-        const canvas = document.getElementById("canvas");
+        const canvasFoto = document.getElementById("canvas-foto");
+        const canvasUnificado = document.getElementById("canvas-unificado");
         const btnStart = document.getElementById("btn-start");
         const btnScan = document.getElementById("btn-scan");
         const statusEl = document.getElementById("status");
@@ -244,7 +247,7 @@
                 video.srcObject = stream;
                 await video.play();
                 btnScan.disabled = false;
-                statusEl.innerText = "✅ Cámara lista. Presiona 'Tomar Foto y Escanear'.";
+                statusEl.innerText = "✅ Cámara lista. Presiona 'Tomar Foto y Unificar'.";
             } catch (error) {
                 console.error(error);
                 statusEl.innerText = "❌ No se pudo abrir la cámara.";
@@ -256,51 +259,88 @@
             btnScan.disabled = true;
 
             try {
-                statusEl.innerText = "📸 Tomando foto y mejorando calidad...";
+                statusEl.innerText = "📸 Tomando foto y procesando zonas...";
 
                 const vW = video.videoWidth;
                 const vH = video.videoHeight;
-                canvas.width = vW;
-                canvas.height = vH;
-                const ctx = canvas.getContext("2d", { willReadFrequently: true });
+                canvasFoto.width = vW;
+                canvasFoto.height = vH;
+                const ctxFoto = canvasFoto.getContext("2d", { willReadFrequently: true });
                 
-                // 1. Capturar la foto de la cámara
-                ctx.drawImage(video, 0, 0, vW, vH);
+                // 1. Capturar la foto real de la cámara
+                ctxFoto.drawImage(video, 0, 0, vW, vH);
 
-                // 2. Mejorar la imagen automáticamente (Contraste y binarización nítida)
-                mejorarCalidadImagen(canvas);
+                statusEl.innerText = "⚙️ Normalizando letra gigante y unificando...";
 
-                statusEl.innerText = "🔎 Normalizando texto gigante y escaneando todo...";
+                // 2. Partir la foto en 2 partes:
+                // PARTE SUPERIOR (Donde está el código gigante, ej: A6)
+                const altoSuperior = Math.floor(vH * 0.35);
+                
+                // PARTE INFERIOR (Donde están los datos pequeños: nombre, celular, etc.)
+                const altoInferior = vH - altoSuperior;
 
-                // 3. Ejecutar OCR en todo el ticket unificado de un solo golpe
+                // Creamos un canvas temporal para la parte superior y la reducimos de tamaño 
+                // para que la letra gigante se vuelva pequeña, del mismo tamaño que el texto inferior.
+                const canvasTopReducido = document.createElement("canvas");
+                const anchoReducido = vW; // Mismo ancho
+                const altoTopReducido = Math.floor(altoSuperior * 0.35); // Reducimos drásticamente el alto (escala ~0.35)
+                canvasTopReducido.width = anchoReducido;
+                canvasTopReducido.height = altoTopReducido;
+                const ctxTopRed = canvasTopReducido.getContext("2d");
+                ctxTopRed.imageSmoothingEnabled = true;
+                ctxTopRed.imageSmoothingQuality = "high";
+                // Dibujamos el recorte superior achicándolo para que coincida en tamaño con las letras de abajo
+                ctxTopRed.drawImage(canvasFoto, 0, 0, vW, altoSuperior, 0, 0, anchoReducido, altoTopReducido);
+
+                // 3. Crear el lienzo unificado final donde ambas partes tienen letras proporcionales
+                canvasUnificado.width = vW;
+                canvasUnificado.height = altoTopReducido + altoInferior;
+                const ctxUnif = canvasUnificado.getContext("2d", { willReadFrequently: true });
+                
+                // Fondo blanco de base
+                ctxUnif.fillStyle = "#FFFFFF";
+                ctxUnif.fillRect(0, 0, canvasUnificado.width, canvasUnificado.height);
+
+                // Pegamos arriba el código gigante ya reducido de tamaño
+                ctxUnif.drawImage(canvasTopReducido, 0, 0);
+                
+                // Pegamos abajo el resto del ticket con la letra pequeña original
+                ctxUnif.drawImage(canvasFoto, 0, altoSuperior, vW, altoInferior, 0, altoTopReducido, vW, altoInferior);
+
+                // 4. Mejorar la calidad de la imagen unificada completa (contraste fuerte B/N)
+                mejorarCalidadImagen(canvasUnificado);
+
+                statusEl.innerText = "🔎 Escaneando imagen unificada...";
+
+                // 5. Escanear todo en conjunto de un solo golpe con Tesseract
                 const resultado = await Tesseract.recognize(
-                    canvas.toDataURL("image/jpeg", 0.95),
+                    canvasUnificado.toDataURL("image/jpeg", 0.95),
                     "spa+eng",
                     {
                         logger: mensaje => {
                             if (mensaje.status === "recognizing text") {
                                 const porcentaje = Math.round(mensaje.progress * 100);
-                                statusEl.innerText = `🔎 Analizando ticket: ${porcentaje}%`;
+                                statusEl.innerText = `🔎 Leyendo ticket unificado: ${porcentaje}%`;
                             }
                         }
                     }
                 );
 
                 const textoCompleto = resultado.data.text;
-                console.log("TEXTO ESCANEADO:", textoCompleto);
+                console.log("TEXTO UNIFICADO ESCANEADO:", textoCompleto);
 
                 procesarResultados(textoCompleto);
                 statusEl.innerText = "✅ ¡Escaneo completado con éxito!";
 
             } catch (error) {
                 console.error(error);
-                statusEl.innerText = "❌ Error al analizar la imagen. Intenta nuevamente.";
+                statusEl.innerText = "❌ Error al procesar la imagen. Intenta nuevamente.";
             } finally {
                 btnScan.disabled = false;
             }
         });
 
-        // Función para mejorar la calidad de la foto tomada (blanco y negro de alto contraste)
+        // Función para aplicar binarización y alto contraste nítido
         function mejorarCalidadImagen(canvas) {
             const ctx = canvas.getContext("2d", { willReadFrequently: true });
             const imagen = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -311,12 +351,9 @@
                 const g = data[i + 1];
                 const b = data[i + 2];
                 
-                // Convertir a escala de grises
                 const gris = 0.299 * r + 0.587 * g + 0.114 * b;
-                
-                // Aplicar contraste fuerte para eliminar sombras del papel
                 let valor = ((gris - 128) * 1.6) + 128;
-                valor = valor > 135 ? 255 : 0; // Blanco o Negro puro
+                valor = valor > 140 ? 255 : 0; // Blanco o negro puro
                 
                 data[i] = data[i + 1] = data[i + 2] = valor;
             }
@@ -435,7 +472,7 @@
         function limpiarTexto(texto) {
             return texto
                 .replace(/^[^A-Za-zÁÉÍÓÚáéíóúÑñÜü0-9]+/, "")
-                .replace(/[^A-Za-zÁÉÍÓÚáéíóúÑñÜü0-9\s:\/\-.]+$/g, "")
+                .replace(/[^A-Za-zÁÉÍÓÚáéíóúÑñÜü0-9\s:\/\-.]+$/g, "",)
                 .replace(/\s+/g, " ")
                 .trim();
         }
