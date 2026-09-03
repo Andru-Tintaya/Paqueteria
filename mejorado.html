@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Escáner de Tickets Ultra+</title>
+    <title>Escáner de Tickets Pro Max</title>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
     <style>
         * {
@@ -231,7 +231,7 @@
 </head>
 <body>
 
-    <h1>📷 Escáner de Tickets Ultra+</h1>
+    <h1>📷 Escáner de Tickets Pro Max</h1>
 
     <div class="camera-container">
         <video id="video" autoplay playsinline></video>
@@ -362,7 +362,7 @@
         });
 
         // ============================================================
-        // ESCANEAR CON MÚLTIPLES ESTRATEGIAS (MEJORADO)
+        // ESCANEAR CON MÚLTIPLES ESTRATEGIAS (MEJORADO PARA CÓDIGO GIGANTE)
         // ============================================================
         btnScan.addEventListener("click", async () => {
             if (!stream) return;
@@ -387,93 +387,105 @@
                 ctxFoto.drawImage(video, 0, 0, vW, vH);
 
                 // ------------------------------------------------------------
-                // PASO 2: DIVIDIR EN ZONAS (35% superior, 65% inferior)
+                // PASO 2: EXTRAER ZONA SUPERIOR (CÓDIGO GIGANTE)
                 // ------------------------------------------------------------
                 const alturaSuperior = Math.floor(vH * 0.35);
-                const alturaInferior = vH - alturaSuperior;
-
-                // ------------------------------------------------------------
-                // PASO 3: PREPROCESAMIENTO AVANZADO DE LA ZONA SUPERIOR
-                // ------------------------------------------------------------
-                // 3a. Extraer zona superior original
                 canvasTop.width = vW;
                 canvasTop.height = alturaSuperior;
                 const ctxTop = canvasTop.getContext("2d", { willReadFrequently: true });
                 ctxTop.drawImage(canvasFoto, 0, 0, vW, alturaSuperior, 0, 0, vW, alturaSuperior);
 
-                // 3b. Reducir drásticamente para normalizar tamaño de letra (factor 0.25)
-                const factorReduccion = 0.25;
-                const altoTopReducido = Math.floor(alturaSuperior * factorReduccion);
-                const anchoTopReducido = vW;
-                canvasTopReducido.width = anchoTopReducido;
-                canvasTopReducido.height = altoTopReducido;
-                const ctxTopRed = canvasTopReducido.getContext("2d");
-                ctxTopRed.imageSmoothingEnabled = true;
-                ctxTopRed.imageSmoothingQuality = "high";
-                ctxTopRed.drawImage(canvasTop, 0, 0, vW, alturaSuperior, 0, 0, anchoTopReducido, altoTopReducido);
+                // ------------------------------------------------------------
+                // PASO 3: PROCESAR LA ZONA SUPERIOR CON MÚLTIPLES ESCALAS
+                // ------------------------------------------------------------
+                const escalas = [1.0, 0.7, 0.5, 0.3];
+                let mejorCodigo = "";
+                let mejorConfianza = 0;
 
-                // ------------------------------------------------------------
-                // PASO 4: CREAR IMAGEN UNIFICADA (con texto de igual tamaño)
-                // ------------------------------------------------------------
-                const altoUnificado = altoTopReducido + alturaInferior;
-                canvasUnificado.width = vW;
-                canvasUnificado.height = altoUnificado;
-                const ctxUnif = canvasUnificado.getContext("2d", { willReadFrequently: true });
-                ctxUnif.fillStyle = "#FFFFFF";
-                ctxUnif.fillRect(0, 0, canvasUnificado.width, canvasUnificado.height);
-                ctxUnif.drawImage(canvasTopReducido, 0, 0);
-                ctxUnif.drawImage(canvasFoto, 0, alturaSuperior, vW, alturaInferior, 0, altoTopReducido, vW, alturaInferior);
+                for (const escala of escalas) {
+                    const anchoEscalado = Math.floor(vW * escala);
+                    const altoEscalado = Math.floor(alturaSuperior * escala);
+                    const canvasTemp = document.createElement("canvas");
+                    canvasTemp.width = anchoEscalado;
+                    canvasTemp.height = altoEscalado;
+                    const ctxTemp = canvasTemp.getContext("2d");
+                    ctxTemp.imageSmoothingEnabled = true;
+                    ctxTemp.imageSmoothingQuality = "high";
+                    ctxTemp.drawImage(canvasTop, 0, 0, vW, alturaSuperior, 0, 0, anchoEscalado, altoEscalado);
 
-                // ------------------------------------------------------------
-                // PASO 5: PREPROCESAMIENTO AVANZADO DE LA IMAGEN UNIFICADA
-                // ------------------------------------------------------------
-                // 5a. Aplicar filtro de mediana (reducción de ruido)
-                aplicarFiltroMediana(canvasUnificado);
-                // 5b. Ecualización de histograma (mejora de contraste)
-                ecualizarHistograma(canvasUnificado);
-                // 5c. Binarización adaptativa
-                binarizarAdaptativo(canvasUnificado, 15, 10);
+                    // Binarización simple (sin filtros agresivos)
+                    const imgData = ctxTemp.getImageData(0, 0, anchoEscalado, altoEscalado);
+                    const data = imgData.data;
+                    for (let i = 0; i < data.length; i += 4) {
+                        const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+                        const val = gray > 140 ? 255 : 0;
+                        data[i] = data[i + 1] = data[i + 2] = val;
+                    }
+                    ctxTemp.putImageData(imgData, 0, 0);
 
-                // Mostrar en debug si está habilitado
-                if (mostrarDebug) {
-                    debugCanvas.width = canvasUnificado.width;
-                    debugCanvas.height = canvasUnificado.height;
-                    const ctxDebug = debugCanvas.getContext("2d");
-                    ctxDebug.drawImage(canvasUnificado, 0, 0);
+                    // OCR con SINGLE_WORD
+                    const ocrResult = await Tesseract.recognize(
+                        canvasTemp.toDataURL("image/png"),
+                        "eng", {
+                            tessedit_pageseg_mode: Tesseract.PSM.SINGLE_WORD,
+                            tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+                        }
+                    );
+                    const texto = ocrResult.data.text.trim();
+                    const confianza = ocrResult.data.confidence || 0;
+                    console.log(`Escala ${escala}: "${texto}" (confianza: ${confianza})`);
+
+                    // Intentar extraer un código válido
+                    const codigoCandidato = extraerCodigo(texto);
+                    if (codigoCandidato) {
+                        // Si encontramos un código válido, lo guardamos y salimos
+                        mejorCodigo = codigoCandidato;
+                        break;
+                    } else if (texto.length > 0 && confianza > mejorConfianza) {
+                        // Si no, guardamos el texto con mayor confianza
+                        mejorConfianza = confianza;
+                        mejorCodigo = texto;
+                    }
+                }
+
+                // Si no se encontró un código válido, intentar con una búsqueda más flexible
+                if (!/^[A-Z]\d{1,3}$/.test(mejorCodigo)) {
+                    // Intentar extraer de cualquier parte de la zona superior
+                    const ocrTopGeneral = await Tesseract.recognize(
+                        canvasTop.toDataURL("image/png"),
+                        "eng", {
+                            tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
+                            tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+                        }
+                    );
+                    const textoGeneral = ocrTopGeneral.data.text.trim();
+                    const codigoExtra = extraerCodigo(textoGeneral);
+                    if (codigoExtra) mejorCodigo = codigoExtra;
                 }
 
                 // ------------------------------------------------------------
-                // PASO 6: MÚLTIPLES ESTRATEGIAS DE OCR
+                // PASO 4: PROCESAR LA ZONA INFERIOR (DATOS)
                 // ------------------------------------------------------------
-                setStatus("🔎 Escaneando con múltiples estrategias...", "#fef3c7", "#92400e");
+                const alturaInferior = vH - alturaSuperior;
+                canvasUnificado.width = vW;
+                canvasUnificado.height = alturaInferior;
+                const ctxUnif = canvasUnificado.getContext("2d", { willReadFrequently: true });
+                ctxUnif.drawImage(canvasFoto, 0, alturaSuperior, vW, alturaInferior, 0, 0, vW, alturaInferior);
 
-                // 6a. OCR sobre la zona superior reducida (modo SINGLE_WORD)
-                const ocrTopRed = await Tesseract.recognize(
-                    canvasTopReducido.toDataURL("image/png"),
-                    "eng", {
-                        tessedit_pageseg_mode: Tesseract.PSM.SINGLE_WORD,
-                        tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-                    }
-                );
-                const textoTopRed = ocrTopRed.data.text.trim();
-                actualizarProgreso(30);
+                // Preprocesamiento ligero para la zona inferior
+                const imgDataInf = ctxUnif.getImageData(0, 0, canvasUnificado.width, canvasUnificado.height);
+                const dataInf = imgDataInf.data;
+                for (let i = 0; i < dataInf.length; i += 4) {
+                    const gray = 0.299 * dataInf[i] + 0.587 * dataInf[i + 1] + 0.114 * dataInf[i + 2];
+                    const val = gray > 135 ? 255 : 0;
+                    dataInf[i] = dataInf[i + 1] = dataInf[i + 2] = val;
+                }
+                ctxUnif.putImageData(imgDataInf, 0, 0);
 
-                // 6b. OCR sobre la zona superior original (modo SINGLE_LINE)
-                const ocrTopOrig = await Tesseract.recognize(
-                    canvasTop.toDataURL("image/png"),
-                    "eng", {
-                        tessedit_pageseg_mode: Tesseract.PSM.SINGLE_LINE,
-                        tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-                    }
-                );
-                const textoTopOrig = ocrTopOrig.data.text.trim();
-                actualizarProgreso(50);
-
-                // 6c. OCR sobre la imagen unificada completa (español+inglés, SINGLE_BLOCK)
-                const ocrUnif = await Tesseract.recognize(
+                // OCR de la zona inferior
+                const ocrInferior = await Tesseract.recognize(
                     canvasUnificado.toDataURL("image/jpeg", 0.95),
                     "spa+eng", {
-                        tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
                         logger: m => {
                             if (m.status === "recognizing text") {
                                 const pct = 50 + Math.round(m.progress * 40);
@@ -482,30 +494,13 @@
                         }
                     }
                 );
-                const textoUnif = ocrUnif.data.text;
-                actualizarProgreso(90);
-
-                // 6d. OCR sobre la unificada pero con PSM AUTO (modo por defecto)
-                const ocrUnifAuto = await Tesseract.recognize(
-                    canvasUnificado.toDataURL("image/jpeg", 0.95),
-                    "spa+eng"
-                );
-                const textoUnifAuto = ocrUnifAuto.data.text;
+                const textoInferior = ocrInferior.data.text;
                 actualizarProgreso(95);
 
                 // ------------------------------------------------------------
-                // PASO 7: COMBINAR RESULTADOS (VOTACIÓN PARA EL CÓDIGO)
+                // PASO 5: COMBINAR RESULTADOS
                 // ------------------------------------------------------------
-                const textosCombinados = [textoTopRed, textoTopOrig, textoUnif, textoUnifAuto].join("\n");
-                console.log("📝 TOP REDUCIDO:", textoTopRed);
-                console.log("📝 TOP ORIGINAL:", textoTopOrig);
-                console.log("📝 UNIFICADO (SINGLE_BLOCK):", textoUnif);
-                console.log("📝 UNIFICADO (AUTO):", textoUnifAuto);
-
-                // ------------------------------------------------------------
-                // PASO 8: PROCESAR RESULTADOS CON DETECCIÓN MEJORADA
-                // ------------------------------------------------------------
-                const resultado = procesarResultadosExtendido(textosCombinados, textoUnif, textoUnifAuto);
+                const resultado = procesarResultados(textoInferior, mejorCodigo);
 
                 // Asignar a inputs
                 document.getElementById("codigo").value = resultado.codigo;
@@ -526,10 +521,9 @@
                     🏪 Tienda: ${resultado.extra || "No detectada"}
                 `;
 
-                // Estadísticas
-                statsEl.textContent = `OCR1: "${textoTopRed}" | OCR2: "${textoTopOrig}" | OCR3: ${textoUnif.length} caracteres`;
+                statsEl.textContent = `Código detectado: "${mejorCodigo}" | Inferior: ${textoInferior.length} caracteres`;
 
-                setStatus("✅ ¡Escaneo completado con éxito! (Multi-OCR + Preprocesamiento)", "#dcfce7", "#166534");
+                setStatus("✅ ¡Escaneo completado con éxito! (Multi-escala + OCR)", "#dcfce7", "#166534");
                 progressFill.style.width = "100%";
 
             } catch (error) {
@@ -541,190 +535,41 @@
         });
 
         // ============================================================
-        // FUNCIONES DE PREPROCESAMIENTO AVANZADO
+        // FUNCIÓN PARA EXTRAER CÓDIGO DE UN TEXTO OCR
         // ============================================================
-
-        // Filtro de mediana (3x3) para reducir ruido
-        function aplicarFiltroMediana(canvas) {
-            const ctx = canvas.getContext("2d", { willReadFrequently: true });
-            const w = canvas.width,
-                h = canvas.height;
-            const imgData = ctx.getImageData(0, 0, w, h);
-            const data = imgData.data;
-            const output = new Uint8ClampedArray(data.length);
-            const radius = 1;
-            const size = (radius * 2 + 1) ** 2;
-
-            for (let y = radius; y < h - radius; y++) {
-                for (let x = radius; x < w - radius; x++) {
-                    const idx = (y * w + x) * 4;
-                    const values = [];
-                    for (let dy = -radius; dy <= radius; dy++) {
-                        for (let dx = -radius; dx <= radius; dx++) {
-                            const ny = y + dy,
-                                nx = x + dx;
-                            const nIdx = (ny * w + nx) * 4;
-                            values.push(data[nIdx]);
-                        }
-                    }
-                    values.sort((a, b) => a - b);
-                    const median = values[Math.floor(size / 2)];
-                    output[idx] = output[idx + 1] = output[idx + 2] = median;
-                    output[idx + 3] = data[idx + 3];
-                }
+        function extraerCodigo(texto) {
+            // Limpiar texto
+            const limpio = texto.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+            // Buscar patrón: letra + 1-3 números
+            const match = limpio.match(/^([A-Z])(\d{1,3})$/);
+            if (match) {
+                return match[1] + match[2];
             }
-            // Copiar bordes
-            for (let y = 0; y < h; y++) {
-                for (let x = 0; x < w; x++) {
-                    const idx = (y * w + x) * 4;
-                    if (output[idx] === undefined) {
-                        output[idx] = data[idx];
-                        output[idx + 1] = data[idx + 1];
-                        output[idx + 2] = data[idx + 2];
-                        output[idx + 3] = data[idx + 3];
-                    }
-                }
+            // Buscar patrón en cualquier parte (si hay basura alrededor)
+            const anyMatch = limpio.match(/([A-Z])(\d{1,3})/);
+            if (anyMatch) {
+                return anyMatch[1] + anyMatch[2];
             }
-            const newData = new ImageData(output, w, h);
-            ctx.putImageData(newData, 0, 0);
-        }
-
-        // Ecualización de histograma (mejora de contraste)
-        function ecualizarHistograma(canvas) {
-            const ctx = canvas.getContext("2d", { willReadFrequently: true });
-            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const data = imgData.data;
-            const hist = new Array(256).fill(0);
-            // Calcular histograma en escala de grises
-            for (let i = 0; i < data.length; i += 4) {
-                const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-                hist[Math.round(gray)]++;
-            }
-            // Acumular
-            const total = data.length / 4;
-            let acum = 0;
-            const map = new Array(256);
-            for (let i = 0; i < 256; i++) {
-                acum += hist[i];
-                map[i] = Math.round((acum / total) * 255);
-            }
-            // Aplicar mapeo
-            for (let i = 0; i < data.length; i += 4) {
-                const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-                const newVal = map[Math.round(gray)];
-                data[i] = data[i + 1] = data[i + 2] = newVal;
-            }
-            ctx.putImageData(imgData, 0, 0);
-        }
-
-        // Binarización adaptativa con umbral local
-        function binarizarAdaptativo(canvas, blockSize = 15, constante = 10) {
-            const ctx = canvas.getContext("2d", { willReadFrequently: true });
-            const w = canvas.width,
-                h = canvas.height;
-            const imgData = ctx.getImageData(0, 0, w, h);
-            const data = imgData.data;
-            const output = new Uint8ClampedArray(data.length);
-            const half = Math.floor(blockSize / 2);
-
-            for (let y = 0; y < h; y++) {
-                for (let x = 0; x < w; x++) {
-                    const idx = (y * w + x) * 4;
-                    // Calcular promedio local
-                    let sum = 0,
-                        count = 0;
-                    for (let dy = -half; dy <= half; dy++) {
-                        for (let dx = -half; dx <= half; dx++) {
-                            const ny = y + dy,
-                                nx = x + dx;
-                            if (ny >= 0 && ny < h && nx >= 0 && nx < w) {
-                                const nIdx = (ny * w + nx) * 4;
-                                const gray = 0.299 * data[nIdx] + 0.587 * data[nIdx + 1] + 0.114 * data[nIdx + 2];
-                                sum += gray;
-                                count++;
-                            }
-                        }
-                    }
-                    const mean = sum / count;
-                    const gray = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
-                    const val = gray > (mean - constante) ? 255 : 0;
-                    output[idx] = output[idx + 1] = output[idx + 2] = val;
-                    output[idx + 3] = data[idx + 3];
-                }
-            }
-            const newData = new ImageData(output, w, h);
-            ctx.putImageData(newData, 0, 0);
+            return "";
         }
 
         // ============================================================
-        // FUNCIONES DE PROCESAMIENTO DE RESULTADOS (MEJORADAS)
+        // PROCESAR RESULTADOS DEL TEXTO INFERIOR
         // ============================================================
+        function procesarResultados(textoInferior, codigoDetectado) {
+            const texto = normalizarOCR(textoInferior);
 
-        function procesarResultadosExtendido(textoCombinado, textoUnif, textoUnifAuto) {
-            const normalizado = normalizarOCR(textoCombinado);
+            let celular = detectarCelular(texto);
+            let fecha = detectarFecha(texto);
+            let detalle = detectarCampo(texto, ["detalle", "producto", "descripcion", "descripción"]);
+            let nombre = detectarNombre(texto, codigoDetectado, celular, fecha, detalle);
+            let extra = detectarExtra(texto);
 
-            // 1. DETECTAR CÓDIGO CON VOTACIÓN
-            let codigo = detectarCodigoVotacion(textoTopRed, textoTopOrig, textoUnif, textoUnifAuto);
-
-            // Si no se detectó, intentar con el combinado
-            if (!codigo) {
-                codigo = detectarCodigoAvanzado(normalizado);
-            }
-
-            // 2. DETECTAR CELULAR
-            let celular = detectarCelular(textoUnif);
-            if (!celular) celular = detectarCelular(textoUnifAuto);
-            if (!celular) celular = detectarCelular(textoCombinado);
-
-            // 3. DETECTAR FECHA
-            let fecha = detectarFecha(textoUnif);
-            if (!fecha) fecha = detectarFecha(textoUnifAuto);
-            if (!fecha) fecha = detectarFecha(textoCombinado);
-
-            // 4. DETECTAR DETALLE
-            let detalle = detectarCampo(textoUnif, ["detalle", "producto", "descripcion", "descripción"]);
-            if (!detalle) detalle = detectarCampo(textoUnifAuto, ["detalle", "producto", "descripcion", "descripción"]);
-            if (!detalle) detalle = detectarCampo(textoCombinado, ["detalle", "producto", "descripcion", "descripción"]);
-
-            // 5. DETECTAR NOMBRE
-            let nombre = detectarNombre(textoUnif, codigo, celular, fecha, detalle);
-            if (!nombre) nombre = detectarNombre(textoUnifAuto, codigo, celular, fecha, detalle);
-            if (!nombre) nombre = detectarNombre(textoCombinado, codigo, celular, fecha, detalle);
-
-            // 6. DETECTAR TIENDA
-            let extra = detectarExtra(textoUnif);
-            if (!extra) extra = detectarExtra(textoUnifAuto);
-            if (!extra) extra = detectarExtra(textoCombinado);
-
-            return { codigo, nombre, celular, detalle, fecha, extra };
+            return { codigo: codigoDetectado, nombre, celular, detalle, fecha, extra };
         }
 
         // ============================================================
-        // DETECCIÓN DE CÓDIGO CON VOTACIÓN
-        // ============================================================
-        function detectarCodigoVotacion(...textos) {
-            const candidatos = [];
-            for (const txt of textos) {
-                if (!txt) continue;
-                const cod = detectarCodigoAvanzado(txt);
-                if (cod) candidatos.push(cod);
-            }
-            if (candidatos.length === 0) return "";
-            const conteo = {};
-            for (const c of candidatos) {
-                conteo[c] = (conteo[c] || 0) + 1;
-            }
-            let max = 0,
-                ganador = candidatos[0];
-            for (const [key, val] of Object.entries(conteo)) {
-                if (val > max) { max = val;
-                    ganador = key; }
-            }
-            return ganador;
-        }
-
-        // ============================================================
-        // FUNCIONES DE DETECCIÓN AVANZADAS
+        // FUNCIONES DE DETECCIÓN (copiadas de la versión anterior, mejoradas)
         // ============================================================
 
         function normalizarOCR(texto) {
@@ -736,59 +581,7 @@
                 .trim();
         }
 
-        function detectarCodigoAvanzado(texto) {
-            // Diccionario masivo de correcciones OCR
-            const correcciones = {
-                'G': '6', 'Z': '2', 'S': '5', 'O': '0',
-                'I': '1', 'L': '1', 'B': '8', 'Q': '0',
-                'D': '0', 'P': '9', 'R': '2', 'T': '7',
-                'Y': '4', 'A': '4', 'E': '3', 'H': '4',
-                'K': '1', 'M': '1', 'N': '1', 'V': '1'
-            };
-
-            // 1. Patrón clásico: letra + 1-3 números
-            let match = texto.match(/\b([A-Z])\s*[-.]?\s*(\d{1,3})\b/gi);
-            if (match && match.length) {
-                for (const candidato of match) {
-                    const limpio = candidato.replace(/[\s\-\.]/g, "").toUpperCase();
-                    if (/^[A-Z]\d{1,3}$/.test(limpio)) {
-                        return limpio;
-                    }
-                }
-            }
-
-            // 2. Buscar en líneas con posibles confusiones
-            const lineas = texto.split("\n").map(l => l.trim()).filter(Boolean);
-            for (const linea of lineas) {
-                let limpia = linea.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
-                if (/^[A-Z][A-Z0-9]{1,3}$/.test(limpia)) {
-                    const prefijo = limpia.charAt(0);
-                    let numeros = "";
-                    for (let char of limpia.substring(1)) {
-                        numeros += correcciones[char] || char;
-                    }
-                    const codigoFinal = prefijo + numeros;
-                    if (/^[A-Z]\d{1,3}$/.test(codigoFinal)) {
-                        return codigoFinal;
-                    }
-                }
-                // Caso especial: "A 6" separado
-                const parts = linea.match(/^([A-Z])\s*(\d{1,3})$/i);
-                if (parts) {
-                    return (parts[1] + parts[2]).toUpperCase();
-                }
-            }
-
-            // 3. Búsqueda global
-            const anyMatch = texto.match(/([A-Z])\s*(\d{1,3})/i);
-            if (anyMatch) {
-                return (anyMatch[1] + anyMatch[2]).toUpperCase();
-            }
-            return "";
-        }
-
         function detectarCelular(texto) {
-            // Bolivia: 7 u 8 dígitos, empieza con 6,7,8,9
             const match = texto.match(/(?:\+591\s*)?\b[6-9]\d{7}\b/g);
             if (match && match.length) {
                 return match[0].replace(/\+591\s*/, "").trim();
@@ -804,8 +597,7 @@
             const patrones = [
                 /\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}\s+\d{1,2}:\d{2}\b/,
                 /\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}\b/,
-                /\b\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}\b/,
-                /\b\d{2}[-]\d{2}[-]\d{4}\b/
+                /\b\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}\b/
             ];
             for (const patron of patrones) {
                 const match = texto.match(patron);
@@ -859,26 +651,20 @@
                 if (/^[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s]+$/.test(linea) && linea.length >= 3) {
                     const prohibidos = ["ticket", "registro", "cliente", "datos", "total", "pago"];
                     if (prohibidos.some(palabra => upper.includes(palabra.toUpperCase()))) continue;
-                    // Si contiene dos palabras separadas, es buena señal
-                    if (linea.split(/\s+/).length >= 2) return linea;
-                    // Si es una sola palabra larga (>5), también puede ser nombre
-                    if (linea.length > 5) return linea;
+                    if (linea.split(/\s+/).length >= 2 || linea.length > 5) return linea;
                 }
             }
             return "";
         }
 
         function detectarExtra(texto) {
-            // Buscar palabras clave de tienda
-            const lugares = ["MEDIA LUNA", "MEDIA LUNA"];
+            const lugares = ["MEDIA LUNA"];
             for (const lugar of lugares) {
                 if (texto.toUpperCase().includes(lugar)) return lugar;
             }
-            // Buscar campo tienda/lugar
             const campo = detectarCampo(texto, ["tienda", "lugar", "sucursal", "local"]);
             if (campo) return campo;
 
-            // Última línea con solo letras y longitud > 3
             const lineas = texto.split("\n").map(l => limpiarTexto(l)).filter(Boolean);
             for (let i = lineas.length - 1; i >= 0; i--) {
                 const linea = lineas[i];
@@ -902,7 +688,6 @@
         // ============================================================
 
         function setStatus(mensaje, bg, color) {
-            // Mantener la estructura con el progress bar
             statusEl.innerHTML = `
                 <span>${mensaje}</span>
                 <div class="progress-bar"><div class="progress-bar-fill" id="progress-fill"></div></div>
@@ -915,12 +700,6 @@
             const fill = document.getElementById("progress-fill");
             if (fill) fill.style.width = Math.min(pct, 100) + "%";
         }
-
-        // Nota: las variables textoTopRed y textoTopOrig se usan en procesarResultadosExtendido,
-        // pero están definidas dentro del evento click. Para que funcionen, las pasamos como parámetros.
-        // Para simplificar, las declaramos globalmente (aunque no sea necesario).
-        let textoTopRed = "";
-        let textoTopOrig = "";
     </script>
 </body>
 </html>
