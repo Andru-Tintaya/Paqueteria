@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Escáner de Tickets</title>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+
+    <style>
+        :root {
+            --primary: #2563eb;
+            --success: #16a34a;
+            --danger: #dc2626;
+            --bg: #f3f4f6;
+            --text: #1f2937;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 {
+            font-size: 1.35rem;
+            text-align: center;
+            margin: 5px 0 15px;
+        }
+
+        .camera-container {
+            width: 100%;
+            max-width: 430px;
+            position: relative;
+            background: #000;
+            border-radius: 14px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0,0,0,.2);
+        }
+
+        video {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .scan-guide {
+            position: absolute;
+            top: 5%;
+            left: 7%;
+            width: 86%;
+            height: 90%;
+            border: 3px solid #22c55e;
+            border-radius: 10px;
+            pointer-events: none;
+        }
+
+        .scan-guide::before {
+            content: "COLOCA TODO EL TICKET DENTRO";
+            position: absolute;
+            top: 5px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #16a34a;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 5px;
+            font-size: 10px;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+
+        .scan-guide::after {
+            content: "A2 / A6 / A10 + NOMBRE + DATOS";
+            position: absolute;
+            bottom: 5px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,.7);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 5px;
+            font-size: 9px;
+            white-space: nowrap;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin: 15px 0;
+            width: 100%;
+            max-width: 430px;
+        }
+
+        button {
+            flex: 1;
+            padding: 13px 10px;
+            border: none;
+            border-radius: 9px;
+            font-size: 1rem;
+            font-weight: bold;
+            color: white;
+            background: var(--primary);
+            cursor: pointer;
+        }
+
+        button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        #btn-scan {
+            background: var(--success);
+        }
+
+        #status {
+            width: 100%;
+            max-width: 430px;
+            min-height: 45px;
+            padding: 10px;
+            margin-bottom: 12px;
+            border-radius: 8px;
+            text-align: center;
+            font-size: .85rem;
+            font-weight: bold;
+            background: #fff7ed;
+            color: #c2410c;
+        }
+
+        .form-container {
+            width: 100%;
+            max-width: 430px;
+            background: white;
+            padding: 18px;
+            border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0,0,0,.1);
+        }
+
+        .form-group {
+            margin-bottom: 12px;
+        }
+
+        label {
+            display: block;
+            font-size: .8rem;
+            font-weight: bold;
+            margin-bottom: 4px;
+            color: #374151;
+        }
+
+        input {
+            width: 100%;
+            padding: 11px;
+            border: 1px solid #d1d5db;
+            border-radius: 7px;
+            font-size: 1rem;
+            outline: none;
+        }
+
+        input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(37,99,235,.15);
+        }
+
+        .codigo-box {
+            border: 2px solid #22c55e;
+            background: #f0fdf4;
+        }
+
+        .resultado {
+            margin-top: 12px;
+            padding: 10px;
+            border-radius: 8px;
+            background: #eff6ff;
+            color: #1d4ed8;
+            font-size: .8rem;
+            line-height: 1.4;
+        }
+
+        canvas {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>📷 Escáner de Tickets</h1>
+    
+    <div class="camera-container">
+        <video id="video" autoplay playsinline></video>
+        <div class="scan-guide"></div>
+    </div>
+    
+    <div class="controls">
+        <button id="btn-start">📷 Abrir Cámara</button>
+        <button id="btn-scan" disabled>🔎 Escanear Todo</button>
+    </div>
+    
+    <div id="status">
+        Presiona "Abrir Cámara" y coloca TODO el ticket dentro de la pantalla.
+    </div>
+    
+    <div class="form-container">
+        <div class="form-group">
+            <label for="codigo">Código PRINCIPAL</label>
+            <input class="codigo-box" type="text" id="codigo" placeholder="Ej: A2, A6, A15">
+        </div>
+        <div class="form-group">
+            <label for="nombre">Nombre</label>
+            <input type="text" id="nombre" placeholder="Nombre completo">
+        </div>
+        <div class="form-group">
+            <label for="celular">Celular</label>
+            <input type="text" id="celular" placeholder="71234567">
+        </div>
+        <div class="form-group">
+            <label for="detalle">Detalle</label>
+            <input type="text" id="detalle" placeholder="ELECTRONICOS">
+        </div>
+        <div class="form-group">
+            <label for="fecha">Fecha y Hora</label>
+            <input type="text" id="fecha" placeholder="09/07/2026 14:30">
+        </div>
+        <div class="form-group">
+            <label for="extra">Tienda / Lugar</label>
+            <input type="text" id="extra" placeholder="MEDIA LUNA">
+        </div>
+        <div class="resultado" id="resultado">
+            El escaneo llenará automáticamente todos los campos.
+        </div>
+    </div>
+
+    <canvas id="canvas"></canvas>
+    <canvas id="canvas-top"></canvas>
+
+    <script>
+        const video = document.getElementById("video");
+        const canvas = document.getElementById("canvas");
+        const canvasTop = document.getElementById("canvas-top");
+        const btnStart = document.getElementById("btn-start");
+        const btnScan = document.getElementById("btn-scan");
+        const statusEl = document.getElementById("status");
+        const resultadoEl = document.getElementById("resultado");
+        let stream = null;
+
+        /* =========================================================
+           INICIAR CÁMARA
+           ========================================================= */
+        btnStart.addEventListener("click", async () => {
+            try {
+                if (stream) {
+                    stream.getTracks().forEach(track => track.stop());
+                }
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: { ideal: "environment" },
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 },
+                        focusMode: "continuous"
+                    },
+                    audio: false
+                });
+                video.srcObject = stream;
+                await video.play();
+                btnScan.disabled = false;
+                statusEl.innerText = "✅ Cámara lista. Coloca TODO el ticket dentro de la pantalla.";
+            } catch (error) {
+                console.error(error);
+                statusEl.innerText = "❌ No se pudo abrir la cámara. Revisa los permisos del navegador.";
+            }
+        });
+
+        /* =========================================================
+           ESCANEAR
+           ========================================================= */
+        btnScan.addEventListener("click", async () => {
+            if (!stream) return;
+            if (!video.videoWidth || !video.videoHeight) {
+                statusEl.innerText = "⏳ Esperando la cámara...";
+                return;
+            }
+            btnScan.disabled = true;
+
+            try {
+                statusEl.innerText = "📸 Capturando ticket...";
+
+                const vW = video.videoWidth;
+                const vH = video.videoHeight;
+                canvas.width = vW;
+                canvas.height = vH;
+                const ctx = canvas.getContext("2d", { willReadFrequently: true });
+                ctx.drawImage(video, 0, 0, vW, vH);
+
+                const escala = 1.5;
+                const ocrCanvas = document.createElement("canvas");
+                ocrCanvas.width = Math.floor(vW * escala);
+                ocrCanvas.height = Math.floor(vH * escala);
+                const ocrCtx = ocrCanvas.getContext("2d");
+                ocrCtx.imageSmoothingEnabled = true;
+                ocrCtx.drawImage(canvas, 0, 0, ocrCanvas.width, ocrCanvas.height);
+
+                statusEl.innerText = "🔎 Leyendo todo el ticket...";
+
+                const resultadoGeneral = await Tesseract.recognize(
+                    ocrCanvas.toDataURL("image/jpeg", 0.95),
+                    "spa+eng",
+                    {
+                        logger: mensaje => {
+                            if (mensaje.status === "recognizing text") {
+                                const porcentaje = Math.round(mensaje.progress * 100);
+                                statusEl.innerText = `🔎 Leyendo ticket: ${porcentaje}%`;
+                            }
+                        }
+                    }
+                );
+                const textoGeneral = resultadoGeneral.data.text;
+                console.log("OCR GENERAL:", textoGeneral);
+
+                statusEl.innerText = "🔎 Buscando código grande...";
+                const topHeight = Math.floor(vH * 0.45);
+                const topScale = 3;
+                canvasTop.width = Math.floor(vW * topScale);
+                canvasTop.height = Math.floor(topHeight * topScale);
+                const topCtx = canvasTop.getContext("2d");
+                topCtx.imageSmoothingEnabled = true;
+                topCtx.drawImage(canvas, 0, 0, vW, topHeight, 0, 0, canvasTop.width, canvasTop.height);
+
+                mejorarImagen(canvasTop, 125);
+
+                const resultadoCodigo = await Tesseract.recognize(
+                    canvasTop.toDataURL("image/png"),
+                    "eng",
+                    {
+                        config: {
+                            tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+                        }
+                    }
+                );
+                const textoCodigo = resultadoCodigo.data.text;
+                console.log("OCR CODIGO:", textoCodigo);
+
+                procesarResultados(textoGeneral, textoCodigo);
+                statusEl.innerText = "✅ ¡Escaneo completado!";
+
+            } catch (error) {
+                console.error(error);
+                statusEl.innerText = "❌ Error al analizar la imagen. Intenta nuevamente.";
+            } finally {
+                btnScan.disabled = false;
+            }
+        });
+
+        /* =========================================================
+           MEJORAR IMAGEN
+           ========================================================= */
+        function mejorarImagen(canvas, threshold = 130) {
+            const ctx = canvas.getContext("2d", { willReadFrequently: true });
+            const imagen = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imagen.data;
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+                const gris = 0.299 * r + 0.587 * g + 0.114 * b;
+                let valor = gris;
+                valor = ((valor - 128) * 1.5) + 128;
+                valor = valor > threshold ? 255 : 0;
+                data[i] = data[i + 1] = data[i + 2] = valor;
+            }
+            ctx.putImageData(imagen, 0, 0);
+        }
+
+        /* =========================================================
+           PROCESAR RESULTADOS
+           ========================================================= */
+        function procesarResultados(textoGeneral, textoCodigo) {
+            console.log("==============================");
+            console.log("TEXTO GENERAL:", textoGeneral);
+            console.log("TEXTO CODIGO:", textoCodigo);
+
+            const textoCompleto = textoCodigo + "\n" + textoGeneral;
+            const textoNormalizado = normalizarOCR(textoCompleto);
+            console.log("NORMALIZADO:", textoNormalizado);
+
+            let codigo = detectarCodigo(textoCodigo, textoGeneral);
+            let celular = detectarCelular(textoGeneral);
+            let fecha = detectarFecha(textoGeneral);
+            let detalle = detectarCampo(textoGeneral, ["detalle", "producto", "descripcion", "descripción"]);
+            let nombre = detectarNombre(textoGeneral, codigo, celular, fecha, detalle);
+            let extra = detectarExtra(textoGeneral);
+
+            document.getElementById("codigo").value = codigo;
+            document.getElementById("nombre").value = nombre;
+            document.getElementById("celular").value = celular;
+            document.getElementById("detalle").value = detalle;
+            document.getElementById("fecha").value = fecha;
+            document.getElementById("extra").value = extra;
+
+            resultadoEl.innerHTML = `
+                <strong>Resultado:</strong><br>
+                Código: ${codigo || "No detectado"}<br>
+                Nombre: ${nombre || "No detectado"}<br>
+                Celular: ${celular || "No detectado"}<br>
+                Detalle: ${detalle || "No detectado"}<br>
+                Fecha: ${fecha || "No detectada"}<br>
+                Tienda: ${extra || "No detectada"}
+            `;
+        }
+
+        /* =========================================================
+           NORMALIZAR OCR
+           ========================================================= */
+        function normalizarOCR(texto) {
+            return texto
+                .replace(/\r/g, "")
+                .replace(/[|]/g, "I")
+                .replace(/[“”"]/g, "")
+                .replace(/[^\S\r\n]+/g, " ")
+                .trim();
+        }
+
+        /* =========================================================
+           DETECTAR CÓDIGO (CON CORRECCIÓN DE OCR)
+           ========================================================= */
+        function detectarCodigo(textoCodigo, textoGeneral) {
+            const candidatos = [textoCodigo, textoGeneral];
+            
+            // Diccionario de confusiones visuales comunes en Tesseract
+            const correccionesOCR = {
+                'G': '6',
+                'Z': '2',
+                'S': '5',
+                'O': '0',
+                'I': '1',
+                'L': '1',
+                'B': '8'
+            };
+
+            for (const texto of candidatos) {
+                if (!texto) continue;
+
+                // 1. Búsqueda directa del patrón correcto (Ej: A6, A 6, A-15)
+                let match = texto.match(/\b([A-Z])\s*[-.]?\s*(\d{1,3})\b/gi);
+                if (match && match.length) {
+                    for (const candidato of match) {
+                        const limpio = candidato.replace(/[\s\-\.]/g, "").toUpperCase();
+                        if (/^[A-Z]\d{1,3}$/.test(limpio)) {
+                            return limpio;
+                        }
+                    }
+                }
+
+                // 2. Búsqueda de errores típicos con letras pegadas y corrección visual
+                const lineas = texto.split("\n").map(l => l.trim()).filter(Boolean);
+                for (const linea of lineas) {
+                    let limpia = linea.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+                    
+                    // Si empieza con una letra (ej: 'A') y le siguen hasta 3 caracteres más
+                    if (/^[A-Z][A-Z0-9]{1,3}$/.test(limpia)) {
+                        
+                        // Extraemos la primera letra (el prefijo) y el resto (los supuestos números)
+                        const prefijo = limpia.charAt(0);
+                        let posiblesNumeros = limpia.substring(1);
+                        
+                        // Aplicamos las correcciones visuales a la parte numérica
+                        let numerosCorregidos = "";
+                        for (let char of posiblesNumeros) {
+                            numerosCorregidos += correccionesOCR[char] || char;
+                        }
+
+                        // Reconstruimos el código y validamos
+                        const codigoFinal = prefijo + numerosCorregidos;
+                        if (/^[A-Z]\d{1,3}$/.test(codigoFinal)) {
+                            return codigoFinal;
+                        }
+                    }
+                }
+            }
+            return "";
+        }
+
+        /* =========================================================
+           DETECTAR CELULAR
+           ========================================================= */
+        function detectarCelular(texto) {
+            const match = texto.match(/(?:\+591\s*)?\b[67]\d{7}\b/g);
+            if (match && match.length) {
+                return match[0].replace(/\+591\s*/, "").trim();
+            }
+            const fallback = texto.match(/\b\d{8}\b/g);
+            if (fallback && fallback.length) {
+                return fallback[0];
+            }
+            return "";
+        }
+
+        /* =========================================================
+           DETECTAR FECHA
+           ========================================================= */
+        function detectarFecha(texto) {
+            const patrones = [
+                /\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}\s+\d{1,2}:\d{2}\b/,
+                /\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}\b/,
+                /\b\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}\b/
+            ];
+            for (const patron of patrones) {
+                const match = texto.match(patron);
+                if (match) {
+                    return match[0];
+                }
+            }
+            return "";
+        }
+
+        /* =========================================================
+           DETECTAR CAMPOS CON ETIQUETA
+           ========================================================= */
+        function detectarCampo(texto, etiquetas) {
+            const lineas = texto.split("\n").map(l => l.trim()).filter(Boolean);
+            for (const linea of lineas) {
+                for (const etiqueta of etiquetas) {
+                    const regex = new RegExp("^" + etiqueta + "\\s*[:\\-]?\\s*(.+)$", "i");
+                    const match = linea.match(regex);
+                    if (match) {
+                        return limpiarTexto(match[1]);
+                    }
+                }
+            }
+            for (let i = 0; i < lineas.length - 1; i++) {
+                for (const etiqueta of etiquetas) {
+                    if (lineas[i].toLowerCase().includes(etiqueta.toLowerCase())) {
+                        return limpiarTexto(lineas[i + 1]);
+                    }
+                }
+            }
+            return "";
+        }
+
+        /* =========================================================
+           DETECTAR NOMBRE
+           ========================================================= */
+        function detectarNombre(texto, codigo, celular, fecha, detalle) {
+            const lineas = texto.split("\n").map(l => limpiarTexto(l)).filter(Boolean);
+            const descartadas = [
+                "detalle", "producto", "descripcion", "descripción", 
+                "nombre", "celular", "telefono", "teléfono", 
+                "fecha", "hora", "tienda", "lugar", "media luna"
+            ];
+            for (const linea of lineas) {
+                const upper = linea.toUpperCase();
+                if (codigo && upper.includes(codigo.toUpperCase())) continue;
+                if (celular && linea.includes(celular)) continue;
+                if (fecha && linea.includes(fecha)) continue;
+                if (detalle && upper.includes(detalle.toUpperCase())) continue;
+                if (descartadas.some(palabra => upper === palabra.toUpperCase())) continue;
+                
+                const numeros = (linea.match(/\d/g) || []).length;
+                if (numeros > linea.length / 2) continue;
+                
+                if (/^[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s]+$/.test(linea) && linea.length >= 3) {
+                    const prohibidos = ["ticket", "registro", "cliente", "datos", "codigo", "código"];
+                    if (prohibidos.some(palabra => upper.includes(palabra.toUpperCase()))) continue;
+                    return linea;
+                }
+            }
+            return "";
+        }
+
+        /* =========================================================
+           DETECTAR EXTRA / TIENDA
+           ========================================================= */
+        function detectarExtra(texto) {
+            const lineas = texto.split("\n").map(l => limpiarTexto(l)).filter(Boolean);
+            const lugares = ["MEDIA LUNA"];
+            for (const lugar of lugares) {
+                if (texto.toUpperCase().includes(lugar)) return lugar;
+            }
+            const campo = detectarCampo(texto, ["tienda", "lugar", "sucursal"]);
+            if (campo) return campo;
+            
+            for (let i = lineas.length - 1; i >= 0; i--) {
+                const linea = lineas[i];
+                if (/^[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s]+$/.test(linea) && linea.length > 3) {
+                    return linea;
+                }
+            }
+            return "";
+        }
+
+        /* =========================================================
+           LIMPIAR TEXTO
+           ========================================================= */
+        function limpiarTexto(texto) {
+            return texto
+                .replace(/^[^A-Za-zÁÉÍÓÚáéíóúÑñÜü0-9]+/, "")
+                .replace(/[^A-Za-zÁÉÍÓÚáéíóúÑñÜü0-9\s:\/\-.]+$/g, "")
+                .replace(/\s+/g, " ")
+                .trim();
+        }
+    </script>
+</body>
+</html>
